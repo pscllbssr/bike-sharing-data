@@ -1,0 +1,41 @@
+---
+title: "Analysis of bike sharing data"
+author: "Elise Gourri, Emilia Marlene Ribeiro Peixoto, Pascal Albisser"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: yes
+    toc_float: TRUE
+    code_folding: hide
+---
+
+```{r, message = FALSE, echo = FALSE}
+library(kableExtra)
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(knitr.table.format = function() {
+  if (knitr::is_latex_output())
+    "latex" else "pipe"
+})
+```
+
+# Dataset
+
+Our Dataset, included mock-data for now. Please put all data in `data/`-folder. Will not be included in the github (good practice), but everyone should have it at the same location.
+
+```{r cars}
+data <- read.csv("data/mock-data.csv")
+kable(head(data))
+```
+
+# SVM
+
+first chapter
+
+# Neural Nets
+
+second chapter
+
+# And so on...
