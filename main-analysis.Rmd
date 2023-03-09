@@ -11,6 +11,9 @@ output:
 
 ```{r, message = FALSE, echo = FALSE}
 library(kableExtra)
+library(ggplot2)
+library(dplyr)
+library(data.table)
 ```
 
 ```{r setup, include=FALSE}
@@ -23,12 +26,34 @@ options(knitr.table.format = function() {
 
 # Dataset
 
-Our Dataset, included mock-data for now. Please put all data in `data/`-folder. Will not be included in the github (good practice), but everyone should have it at the same location.
+Our Dataset, pls run `scripts/download-data.R` first.
 
-```{r cars}
-data <- read.csv("data/mock-data.csv")
+```{r}
+data <- fread("data/trips_s.csv")
 kable(head(data))
 ```
+
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = city, fill = city)) + 
+    geom_bar() +
+    labs(title = "Number of trips per city")
+```
+
+
+
+
+```{r}
+data %>% 
+  group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
+  summarise(n = n()) %>% 
+  ggplot(mapping = aes(y = n, x = as.Date(year_month), group = city, colour = city)) + 
+    geom_line() +
+    geom_point() +
+    labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
+```
+
 
 # SVM
 

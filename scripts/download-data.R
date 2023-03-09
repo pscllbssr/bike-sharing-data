@@ -1,6 +1,7 @@
 library(readr)
 library(glue)
 library(RCurl)
+library(dplyr)
 
 years <- 2018:2022
 months <- sprintf("%02d", 01:12)
@@ -51,9 +52,42 @@ for (city in names(weather_station_ids)) {
 
 colnames(weather_data) <- c("date", "hour", "temp", "dwpt", "rhum", "prcp", "snow", "wdir", "wspd", "wpgt", "pres", "tsun", "coco", "city")
 
-# write to file
+# merging the files
 
-write.csv(trip_data, "data/trip_data.csv")
-write.csv(weather_data, "data/weather_data.csv")
+## prepare
+trip_data$started_at <- as.POSIXct(trip_data$started_at)
+trip_data$ended_at <- as.POSIXct(trip_data$ended_at)
+trip_data$started_at_date <- as.Date(trip_data$started_at)
+trip_data$started_at_hour <- format(trip_data$started_at, "%H")
 
-# TBD: merging the two. Beware: sometimes hourly, sometimes "6-hourly"
+## test the join
+left_join(trip_data[1:100,], weather_data, by = join_by(x$started_at_date == y$date, x$started_at_hour == y$hour, city), keep = TRUE) %>% 
+  select(started_at, city.x, city.y, date, hour)
+
+## join!
+trips <- left_join(trip_data, weather_data, by = join_by(x$started_at_date == y$date, x$started_at_hour == y$hour, city))
+
+## tidy up
+trips <- trips %>% 
+  select(
+    -started_at_hour,
+    -started_at_date
+  )
+
+# write to file (complete)
+write.csv(trips, "data/trips.csv", row.names = FALSE)
+
+# subset for smaller file size
+trips_col_subset <- trips %>% 
+  select(
+    -start_station_name,
+    -start_station_description,
+    -end_station_description,
+    -end_station_name,
+    -rhum,
+    -wdir,
+    -wspd,
+    -pres
+  )
+
+write.csv(trips_col_subset, "data/trips_s.csv", row.names = FALSE)
