@@ -9,11 +9,13 @@ output:
     code_folding: hide
 ---
 
-```{r, message = FALSE, echo = FALSE}
+```{r libraries, message = FALSE, echo = FALSE}
 library(kableExtra)
 library(ggplot2)
 library(dplyr)
 library(data.table)
+library(tidyr) 
+library(scales)
 ```
 
 ```{r setup, include=FALSE}
@@ -52,29 +54,40 @@ data %>%
     labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
 ```
 
-# Weather
+# Weather (Elise)
+
+I started using our main dataset but because I want to summarize data per day. 
+I don't know how to group the data because we have a different amount of data per hour 
+with the bike rental data...
+So for now I will try with the weather_data dataframe. We can ditch all this later if 
+we don't use it.
 
 ```{r precipitations}
-data %>% 
-  group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
-  summarise(precipitations = sum(prcp)) %>% 
-  ggplot(mapping = aes(y = precipitations, x = as.Date(year_month), group = city, colour = city)) + 
-    geom_line() +
-    geom_point() +
-    labs(title = "Sum of precipitations per city and month", y = "precipitations in mm", x = "")
+precip <- weather_data %>% filter(date > "2017-12-31") %>%
+  mutate(prcp = replace_na(prcp, 0)) %>%
+  group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
+  summarise(precipitations = sum(prcp)) 
+
+ggplot(data = precip, mapping = aes(y = precipitations, x = year_month, group = city, colour = city)) + 
+  geom_point() +
+  geom_line() +
+  labs(title = "Sum of precipitations per city and month", y = "precipitations in mm", x = "")
 ```
-Elise: are those missing values or it never rains???
+
 
 ```{r temperature}
-data %>% 
-  group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
-  summarise(mean_temp = mean(temp)) %>% 
-  ggplot(mapping = aes(y = mean_temp, x = as.Date(year_month), group = city, colour = city)) + 
-    geom_line() +
-    geom_point() +
-    labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
+
+tempe <- weather_data %>% filter(date > "2017-12-31") %>%
+  mutate(temp = replace_na(temp, 0)) %>%
+  group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
+  summarise(temp_av = mean(temp)) 
+
+ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, colour = city)) + 
+  geom_point() +
+  geom_line() +
+  labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
 ```
-A lot of missing values for Bergen and no data for Trondheim before 2021...
+
 
 # Linear Model
 
