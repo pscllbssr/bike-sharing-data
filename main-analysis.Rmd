@@ -9,6 +9,8 @@ output:
     code_folding: hide
 ---
 
+TEST COMMIT because the last one was not complete...
+
 ```{r libraries, message = FALSE, echo = FALSE}
 library(kableExtra)
 library(ggplot2)
@@ -16,6 +18,10 @@ library(dplyr)
 library(data.table)
 library(tidyr) 
 library(scales)
+library(tidyverse)
+library(kernlab)
+library(e1071)
+library(caret)
 ```
 
 ```{r setup, include=FALSE}
@@ -40,11 +46,13 @@ kable(head(data))
 data %>% 
   ggplot(mapping = aes(x = city, fill = city)) + 
     geom_bar() +
+  geom_text(aes(label = after_stat(count)), stat = 'count', nudge_y = 0.5,
+    colour = 'black',size = 3) +
     labs(title = "Number of trips per city")
 ```
 
 
-```{r trips_per_month}
+```{r trips_per_month, message = FALSE}
 data %>% 
   group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
   summarise(n = n()) %>% 
@@ -54,6 +62,10 @@ data %>%
     labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
 ```
 
+## Duration of trips
+
+__Emilia told me (Elise) that some trip durations are absurd. We need to check that!__
+
 # Weather (Elise)
 
 I started using our main dataset but because I want to summarize data per day. 
@@ -62,7 +74,17 @@ with the bike rental data...
 So for now I will try with the weather_data dataframe. We can ditch all this later if 
 we don't use it.
 
-```{r precipitations}
+## Precipitations
+
+Here, I am checking if the na in our weather data precipitations are also na on the metesostat.net website.
+I checked 2021-08-30 3h Oslo: on the website, it is everywhere 0. So we should be fine replacing the NA by 0 for precipitation.
+
+```{r precip-na}
+precip_na <- filter(weather_data,is.na(weather_data$prcp)) %>% arrange(desc(date))
+head(precip_na,500)
+```
+
+```{r precipitations, message = FALSE}
 precip <- weather_data %>% filter(date > "2017-12-31") %>%
   mutate(prcp = replace_na(prcp, 0)) %>%
   group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
@@ -75,10 +97,25 @@ ggplot(data = precip, mapping = aes(y = precipitations, x = year_month, group = 
 ```
 
 
-```{r temperature}
+## Temperature
 
+Here, I am checking if the na in our weather data temperature are also na on the metesostat.net website.
+```{r temperature-na}
+temp_na <- filter(weather_data,is.na(weather_data$temp)) %>% arrange(desc(date))
+length(temp_na$date)
+temp_na %>% group_by(city,date) %>% count() %>% arrange(desc(n))
+head(temp_na,200)
+```
+
+There are 1'404 missing values which we could fill with fill(weather_data, temp, .direction = 'down').
+I don't know how many bike data are concerned. Another possibility, would be to just remove the bike data with missing temperature.
+If we choose to fill missing data, we would need to do it before merging the weather and bike datasets.
+Let me know what you guys think.
+
+```{r temperature}
 tempe <- weather_data %>% filter(date > "2017-12-31") %>%
-  mutate(temp = replace_na(temp, 0)) %>%
+  #mutate(temp = replace_na(temp, 0)) %>%
+  fill(temp, .direction = 'down') %>%
   group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
   summarise(temp_av = mean(temp)) 
 
@@ -87,7 +124,6 @@ ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, co
   geom_line() +
   labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
 ```
-
 
 # Linear Model
 
@@ -100,5 +136,66 @@ ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, co
 # Neural Network
 
 # Support Vector Machine
+
+We predict the city based on latitude and longitude.
+
+```{r cities_dataset}
+# Cities dataset
+cities_start <- data %>% select(c(start_station_latitude, start_station_longitude, city))
+colnames(cities_start) <- c("latitude", "longitude","city")
+
+cities_end <- data %>% select(c(end_station_latitude, end_station_longitude, city))
+colnames(cities_end) <- c("latitude", "longitude","city")
+
+cities <- rbind(cities_start, cities_end)
+rm(cities_start, cities_end)
+
+cities$city <- as.factor(cities$city)
+
+colSums(is.na(cities)) # no missing values!
+
+# form training and testing datasets
+set.seed(10)
+indices <- createDataPartition(cities$city, p=0.7, list=F)
+
+train_cities <- cities %>% slice(indices)
+test_cities <-  cities %>% slice(-indices)
+test_cities_truth <- cities %>% slice(-indices) %>% pull(city)
+```
+
+## Linear kernel
+
+```{r SVM_city_linear}
+cities_svm <- svm(city ~. , train_cities, kernel = "linear", scale = TRUE, cost = 10)
+
+#make predictions
+test_pred <- predict(cities_svm, test_cities)
+table(test_pred)
+#evaluate the results
+conf_matrix <- confusionMatrix(test_pred, test_cities_truth)
+conf_matrix
+
+#plot does not work...
+#plot(cities_svm, train_cities, start_station_latitude, start_station_longitude)
+```
+
+Only 3 data points were misclassified. We built a SVM with a prediction accuracy of nearly 100%.
+__cf. Iris lab: We should do some cross-validation to ensure that we are not simply lucky with the train/test split. But on the other end... it is good enough, no?__
+
+## Radial kernel
+
+```{r SVM_city_radial}
+cities_svm_radial <- svm(city ~. , train_cities, kernel = "radial", scale = TRUE, cost = 100)
+
+#make predictions
+test_pred2 <- predict(cities_svm_radial, test_cities)
+table(test_pred2)
+#evaluate the results
+conf_matrix2 <- confusionMatrix(test_pred2, test_cities_truth)
+conf_matrix2
+```
+Same results with another type of kernel.
+
+__It would be useful to identify those 3 wrong values, but I don't know how...__
 
 # Solve an optimisation problem
