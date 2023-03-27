@@ -21,7 +21,7 @@ library(scales)
 library(tidyverse)
 library(kernlab)
 library(e1071)
-library(caret)
+library(caret) 
 ```
 
 ```{r setup, include=FALSE}
@@ -80,20 +80,20 @@ Here, I am checking if the na in our weather data precipitations are also na on 
 I checked 2021-08-30 3h Oslo: on the website, it is everywhere 0. So we should be fine replacing the NA by 0 for precipitation.
 
 ```{r precip-na}
-precip_na <- filter(weather_data,is.na(weather_data$prcp)) %>% arrange(desc(date))
-head(precip_na,500)
+# precip_na <- filter(weather_data,is.na(weather_data$prcp)) %>% arrange(desc(date))
+# head(precip_na,500)
 ```
 
 ```{r precipitations, message = FALSE}
-precip <- weather_data %>% filter(date > "2017-12-31") %>%
-  mutate(prcp = replace_na(prcp, 0)) %>%
-  group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
-  summarise(precipitations = sum(prcp)) 
-
-ggplot(data = precip, mapping = aes(y = precipitations, x = year_month, group = city, colour = city)) + 
-  geom_point() +
-  geom_line() +
-  labs(title = "Sum of precipitations per city and month", y = "precipitations in mm", x = "")
+# precip <- weather_data %>% filter(date > "2017-12-31") %>%
+#   mutate(prcp = replace_na(prcp, 0)) %>%
+#   group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
+#   summarise(precipitations = sum(prcp)) 
+# 
+# ggplot(data = precip, mapping = aes(y = precipitations, x = year_month, group = city, colour = city)) + 
+#   geom_point() +
+#   geom_line() +
+#   labs(title = "Sum of precipitations per city and month", y = "precipitations in mm", x = "")
 ```
 
 
@@ -101,10 +101,10 @@ ggplot(data = precip, mapping = aes(y = precipitations, x = year_month, group = 
 
 Here, I am checking if the na in our weather data temperature are also na on the metesostat.net website.
 ```{r temperature-na}
-temp_na <- filter(weather_data,is.na(weather_data$temp)) %>% arrange(desc(date))
-length(temp_na$date)
-temp_na %>% group_by(city,date) %>% count() %>% arrange(desc(n))
-head(temp_na,200)
+# temp_na <- filter(weather_data,is.na(weather_data$temp)) %>% arrange(desc(date))
+# length(temp_na$date)
+# temp_na %>% group_by(city,date) %>% count() %>% arrange(desc(n))
+# head(temp_na,200)
 ```
 
 There are 1'404 missing values which we could fill with fill(weather_data, temp, .direction = 'down').
@@ -113,16 +113,16 @@ If we choose to fill missing data, we would need to do it before merging the wea
 Let me know what you guys think.
 
 ```{r temperature}
-tempe <- weather_data %>% filter(date > "2017-12-31") %>%
-  #mutate(temp = replace_na(temp, 0)) %>%
-  fill(temp, .direction = 'down') %>%
-  group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
-  summarise(temp_av = mean(temp)) 
-
-ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, colour = city)) + 
-  geom_point() +
-  geom_line() +
-  labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
+# tempe <- weather_data %>% filter(date > "2017-12-31") %>%
+#   #mutate(temp = replace_na(temp, 0)) %>%
+#   fill(temp, .direction = 'down') %>%
+#   group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
+#   summarise(temp_av = mean(temp)) 
+# 
+# ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, colour = city)) + 
+#   geom_point() +
+#   geom_line() +
+#   labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
 ```
 
 # Linear Model
@@ -140,7 +140,7 @@ ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, co
 We predict the city based on latitude and longitude.
 
 ```{r cities_dataset}
-# Cities dataset
+# prepare data
 cities_start <- data %>% select(c(start_station_latitude, start_station_longitude, city))
 colnames(cities_start) <- c("latitude", "longitude","city")
 
@@ -152,15 +152,36 @@ rm(cities_start, cities_end)
 
 cities$city <- as.factor(cities$city)
 
-colSums(is.na(cities)) # no missing values!
+print(colSums(is.na(cities))) # no missing values!
 
+set.seed(10)
+cities_subset <- rbind(
+  cities[city == 'Trondheim'][sample(nrow(cities[city == 'Trondheim']), 33300), ],
+  cities[city == 'Oslo'][sample(nrow(cities[city == 'Oslo']), 33300), ],
+  cities[city == 'Bergen'][sample(nrow(cities[city == 'Bergen']), 33300), ]
+)
+cities_subset %>% 
+  group_by(city) %>% 
+  summarise('number' = n())
+  
+```
+
+```{r}
+cities_subset %>% 
+  ggplot(mapping = aes(x = longitude, y = latitude, color = city)) +
+    geom_point() +
+    labs(title = "Start/End points per city")
+```
+
+
+```{r cities_dataset_split}
 # form training and testing datasets
 set.seed(10)
-indices <- createDataPartition(cities$city, p=0.7, list=F)
+indices <- createDataPartition(cities_subset$city, p=0.7, list=F)
 
-train_cities <- cities %>% slice(indices)
-test_cities <-  cities %>% slice(-indices)
-test_cities_truth <- cities %>% slice(-indices) %>% pull(city)
+train_cities <- cities_subset %>% slice(indices)
+test_cities <-  cities_subset %>% slice(-indices)
+test_cities_truth <- cities_subset %>% slice(-indices) %>% pull(city)
 ```
 
 ## Linear kernel
@@ -171,12 +192,18 @@ cities_svm <- svm(city ~. , train_cities, kernel = "linear", scale = TRUE, cost 
 #make predictions
 test_pred <- predict(cities_svm, test_cities)
 table(test_pred)
+
+```
+
+```{r}
+plot(cities_svm, train_cities, latitude ~ longitude)
+```
+
+```{r}
 #evaluate the results
 conf_matrix <- confusionMatrix(test_pred, test_cities_truth)
 conf_matrix
 
-#plot does not work...
-#plot(cities_svm, train_cities, start_station_latitude, start_station_longitude)
 ```
 
 Only 3 data points were misclassified. We built a SVM with a prediction accuracy of nearly 100%.
@@ -187,15 +214,25 @@ __cf. Iris lab: We should do some cross-validation to ensure that we are not sim
 ```{r SVM_city_radial}
 cities_svm_radial <- svm(city ~. , train_cities, kernel = "radial", scale = TRUE, cost = 100)
 
+# plot classification
+plot(cities_svm_radial, train_cities, latitude ~ longitude)
+
+```
+
+```{r}
 #make predictions
 test_pred2 <- predict(cities_svm_radial, test_cities)
 table(test_pred2)
+```
+
+```{r}
+  
 #evaluate the results
 conf_matrix2 <- confusionMatrix(test_pred2, test_cities_truth)
 conf_matrix2
 ```
 Same results with another type of kernel.
 
-__It would be useful to identify those 3 wrong values, but I don't know how...__
+__It would be useful to identify those 3 wrong values, but I don't know how...__ (Pascal: just ignore them for now, or not?)
 
 # Solve an optimisation problem
