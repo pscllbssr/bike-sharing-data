@@ -9,19 +9,20 @@ output:
     code_folding: hide
 ---
 
-TEST COMMIT because the last one was not complete...
+__the person who corrected my bootcamp project really loved the fact that we described what we were loading the libraries for. Do you agree to add a little structure and make some comments in it as well, as I did in the r libraries chunk?__
+
 
 ```{r libraries, message = FALSE, echo = FALSE}
-library(kableExtra)
-library(ggplot2)
-library(dplyr)
-library(data.table)
-library(tidyr) 
-library(scales)
+
+# data manipulation and visualization
+library(data.table) # aggregation of large data
 library(tidyverse)
-library(kernlab)
+library(kableExtra) # to render tables in html
+
+# machine learning libraries
 library(e1071)
 library(caret) 
+library(kernlab)
 ```
 
 ```{r setup, include=FALSE}
@@ -35,6 +36,15 @@ options(knitr.table.format = function() {
 # Dataset
 
 Our Dataset, pls run `scripts/download-data.R` first.
+
+__Main variables:__ __TO BE COMPLETED__  
+- Time of start and end of the trip, as well as its duration (in seconds)
+- Start and end stations
+- City
+- Temperature
+- Wind
+- Amount of precipitation
+- Presence or absence of snow
 
 ```{r head_data}
 data <- fread("data/trips_s.csv")
@@ -62,9 +72,70 @@ data %>%
     labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
 ```
 
+## Modification of the dataset
+
+We need to modify the dataset to be able to perform our analysis.
+
+### Time of rental
+
+```{r time_col}
+data_mod <- data %>% mutate(start = as.ITime(started_at)) %>%
+  mutate(end = as.ITime(ended_at))
+head(data_mod)
+```
+
+
+## Time of the trips
+
+There are no missing values concerning the start or the end time of the trips.
+
+Some background information: __may or may not be included in the report at the end__
+In Bergen, bikes are available for rental throughout the year between 5am and midnight. ^[https://bergenbysykkel.no/en/faq]
+The bikes in the city of Oslo are available anytime of the year between 5am and 1am. ^[https://oslobysykkel.no/en/faq]
+In Trondheim, the bikes are available as long as there is no ice on the ground, 
+from April to the start of December. ^[https://trondheimbysykkel.no/en/faq]
+
+__I (Elise) want to check that this info fits our data.__
+
+```{r time_trips}
+
+# Bergen
+# There should be no data between midnight and 5am.
+bergen <- data_mod %>% filter(city == "Bergen")
+bergen %>% ggplot(aes(x = start)) +
+  geom_histogram() + 
+  scale_x_time(breaks = "1 hour")
+
+# Oslo
+# There should be no data between 1am and 5am.
+oslo <- data %>% filter(city == "Oslo")
+
+# Trondheim
+# There should be no data for the months January to March. and some data available during the night.
+trondheim <- data %>% filter(city == "Trondheim")
+
+
+
+
+
+```
+
+
+
 ## Duration of trips
 
+The duration of each trips is indicated in seconds
+
 __Emilia told me (Elise) that some trip durations are absurd. We need to check that!__
+
+```{r duration}
+data %>% 
+  ggplot(mapping = aes(x = city, y = duration)) + 
+    geom_boxplot() +
+    labs(title = "Distribution of the trips duration")
+```
+Some trips durations seems to be too high.
+
 
 # Weather (Elise)
 
@@ -192,7 +263,6 @@ cities_svm <- svm(city ~. , train_cities, kernel = "linear", scale = TRUE, cost 
 #make predictions
 test_pred <- predict(cities_svm, test_cities)
 table(test_pred)
-
 ```
 
 ```{r}
@@ -216,7 +286,6 @@ cities_svm_radial <- svm(city ~. , train_cities, kernel = "radial", scale = TRUE
 
 # plot classification
 plot(cities_svm_radial, train_cities, latitude ~ longitude)
-
 ```
 
 ```{r}
@@ -226,13 +295,12 @@ table(test_pred2)
 ```
 
 ```{r}
-  
 #evaluate the results
 conf_matrix2 <- confusionMatrix(test_pred2, test_cities_truth)
 conf_matrix2
 ```
 Same results with another type of kernel.
 
-__It would be useful to identify those 3 wrong values, but I don't know how...__ (Pascal: just ignore them for now, or not?)
+__We ignore the 3 wrong values (at least for now :)__ 
 
 # Solve an optimisation problem
