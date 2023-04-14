@@ -124,17 +124,30 @@ trondheim <- data %>% filter(city == "Trondheim")
 
 ## Duration of trips
 
-The duration of each trips is indicated in seconds
+```{r duration_nb, results = FALSE}
+short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
+short_trips
+long_trips <- nrow(subset(data, duration >= 86400))
+long_trips
 
-__Emilia told me (Elise) that some trip durations are absurd. We need to check that!__
+data_mod <- data_mod[!(data_mod$duration <= 120 & data_mod$start_station_id == data_mod$end_station_id) & !(data_mod$duration >= 86400), ]
 
-```{r duration}
-data %>% 
+max(data_mod$duration)
+```
+
+The duration of each trips is indicated in seconds.   
+We removed `r short_trips` trips 
+which lasted 2 min or less with the same start and end station. They probably correspond 
+to users picking up a bike and immediately returning it. We also focused on trips lasting less than 24 hours 
+and therefore removed `r long_trips` trips from our dataset.
+
+__box plot is not the best... we need to do it better__
+```{r duration_plot}
+data_mod %>% 
   ggplot(mapping = aes(x = city, y = duration)) + 
     geom_boxplot() +
     labs(title = "Distribution of the trips duration")
 ```
-Some trips durations seems to be too high.
 
 
 # Weather (Elise)
