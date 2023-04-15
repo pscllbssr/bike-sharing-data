@@ -213,6 +213,87 @@ Let me know what you guys think.
 
 # Generalised Linear Model with family set to Poisson
 
+predict how many bikes we need to have available at given station, depending on weather?, ...?
+
+trips is count data, so we need poisson model.
+
+see which stations have the most trips:
+
+```{r}
+data %>% 
+  group_by(start_station_id) %>% 
+  summarise(
+    outgoing_trips=n(),
+    city=last(city),
+    lat=last(start_station_latitude),
+    lon=last(start_station_longitude)) %>% 
+  arrange(desc(outgoing_trips)) %>% 
+  head(10)
+```
+
+Seems to be station in the city center, close to university: <http://www.openstreetmap.org/?mlat=60.37969&mlon=5.351994&zoom=12>
+
+prepare data
+
+```{r}
+# get data for station 220
+station_220_data <- data %>% 
+  filter(start_station_id == 220)
+
+# get outgoing trips per day and possible predictors
+station_220_data <- station_220_data %>% 
+  mutate(started_trip_date = as.Date(started_at)) %>% 
+  group_by(started_trip_date) %>% 
+  summarise(
+    trips = n(),
+    avg_temp = mean(temp, na.rm = T),
+    max_temp = max(temp, na.rm = T),
+    min_temp = min(temp, na.rm = T),
+  ) %>% 
+  mutate(weekday = wday(started_trip_date, week_start=1))
+
+```
+see correlation with temperatures
+
+```{r}
+station_220_data %>% 
+  ggplot(mapping = aes(y = trips, x = avg_temp)) + 
+      geom_point() +
+      labs(title = "Number of trips vs. average temperature", 
+           subtitle = "station 220, Bergen",
+           y = "number of trips", 
+           x = "avg. temperature C°")
+
+```
+
+fit the model
+
+```{r}
+trips_at_220_model <- glm(trips ~ avg_temp,
+  family = "poisson",
+  data = station_220_data)
+
+summary(trips_at_220_model)
+```
+
+beware this is tons of samples, high power
+
+but result is highly significant
+
+```{r}
+station_220_data %>% 
+  ggplot(mapping = aes(y = trips, x = avg_temp)) + 
+      geom_point() +
+      labs(title = "Number of trips vs. average temperature", 
+           subtitle = "station 220, Bergen",
+           y = "number of trips", 
+           x = "avg. temperature C°") +
+      geom_abline(intercept = trips_at_220_model$coefficients[1], slope = trips_at_220_model$coefficients[2])
+```
+
+
+
+
 # Generalised Linear Model with family set to Binomial
 
 # Generalised Additive Model
