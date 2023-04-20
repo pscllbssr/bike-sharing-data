@@ -219,7 +219,7 @@ trips is count data, so we need poisson model.
 
 see which stations have the most trips:
 
-```{r}
+```{r maxtrips_station}
 data %>% 
   group_by(start_station_id) %>% 
   summarise(
@@ -235,7 +235,7 @@ Seems to be station in the city center, close to university: <http://www.openstr
 
 prepare data
 
-```{r}
+```{r station220_data, message = False}
 # get data for station 220
 station_220_data <- data %>% 
   filter(start_station_id == 220)
@@ -250,12 +250,14 @@ station_220_data <- station_220_data %>%
     max_temp = max(temp, na.rm = T),
     min_temp = min(temp, na.rm = T),
   ) %>% 
-  mutate(weekday = wday(started_trip_date, week_start=1))
+  mutate(weekday = wday(started_trip_date, week_start=1)) 
 
+# Removing any missing values:
+station_220_data <- na.omit(station_220_data)
 ```
 see correlation with temperatures
 
-```{r}
+```{r station220_avgtemp}
 station_220_data %>% 
   ggplot(mapping = aes(y = trips, x = avg_temp)) + 
       geom_point() +
@@ -268,7 +270,7 @@ station_220_data %>%
 
 fit the model
 
-```{r}
+```{r station220_avgtemp_poisson}
 trips_at_220_model <- glm(trips ~ avg_temp,
   family = "poisson",
   data = station_220_data)
@@ -280,7 +282,7 @@ beware this is tons of samples, high power
 
 but result is highly significant
 
-```{r}
+```{r station220_avgtemp_poisson_graphe}
 station_220_data %>% 
   ggplot(mapping = aes(y = trips, x = avg_temp)) + 
       geom_point() +
@@ -290,8 +292,38 @@ station_220_data %>%
            x = "avg. temperature C°") +
       geom_abline(intercept = trips_at_220_model$coefficients[1], slope = trips_at_220_model$coefficients[2])
 ```
+## Similar analysis with maximal temperature (Elise)
 
+I thought using the maximal temperature would make a difference but it does not :).
+__Would making this study on the top 10 stations or on a whole city make a difference?__
 
+```{r station220_maxtemp}
+station_220_data %>% 
+  ggplot(mapping = aes(y = trips, x = max_temp)) + 
+      geom_point() +
+      labs(title = "Number of trips vs. average temperature", 
+           subtitle = "station 220, Bergen",
+           y = "number of trips", 
+           x = "Max temperature C°")
+```
+```{r station220_maxtemp_poisson}
+station_220_data <- na.omit(station_220_data)
+trips_at_220_model_maxtemp <- glm(trips ~ max_temp,
+  family = "poisson",
+  data = station_220_data)
+
+summary(trips_at_220_model_maxtemp)
+```
+```{r station220_maxtemp_poisson_graphe}
+station_220_data %>% 
+  ggplot(mapping = aes(y = trips, x = max_temp)) + 
+      geom_point() +
+      labs(title = "Number of trips vs. maximal temperature", 
+           subtitle = "station 220, Bergen",
+           y = "number of trips", 
+           x = "max temperature C°") +
+      geom_abline(intercept = trips_at_220_model_maxtemp$coefficients[1], slope = trips_at_220_model_maxtemp$coefficients[2])
+```
 
 
 # Generalised Linear Model with family set to Binomial
