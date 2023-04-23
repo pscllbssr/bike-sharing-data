@@ -17,7 +17,9 @@ __the person who corrected my bootcamp project really loved the fact that we des
 # data manipulation and visualization
 library(data.table) # aggregation of large data
 library(tidyverse)
+library(lubridate)
 library(kableExtra) # to render tables in html
+library(gridExtra)
 
 # machine learning libraries
 library(e1071)
@@ -62,7 +64,7 @@ data %>%
 ```
 
 
-```{r trips_per_month, message = FALSE}
+```{r trips_per_month}
 data %>% 
   group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
   summarise(n = n()) %>% 
@@ -72,13 +74,121 @@ data %>%
     labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
 ```
 
-## Modification of the dataset
+## Data preparation
 
 We need to modify the dataset to be able to perform our analysis.
 
+### Duration of trips -TO RUN-
+
+```{r duration_nb, results=FALSE}
+# count the number of trips taht lasted 2 minutes or less and starting and ending at the same station
+short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
+short_trips
+# count the number of trips that lasted 24 hour and more
+long_trips <- nrow(subset(data, duration >= 86400))
+long_trips
+
+# remove the data concerning the "short" and long "trips"
+data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_id) & !(data$duration >= 86400), ]
+
+max(data$duration)
+```
+
+The duration of each trips is indicated in seconds.   
+We removed `r short_trips` trips 
+which lasted 2 min or less with the same start and end station. They probably correspond 
+to users picking up a bike and immediately returning it. We also focused on trips lasting less than 24 hours 
+and therefore removed `r long_trips` trips from our dataset.
+
+__box plot is not the best... we need to do it better__
+```{r duration_plot, eval=FALSE}
+data_mod %>% 
+  ggplot(mapping = aes(x = city, y = duration)) + 
+    geom_boxplot() +
+    labs(title = "Distribution of the trips duration")
+```
+
+### Retain only April to November -TO RUN-
+
+In Trondheim, the bikes are available as long as there is no ice on the ground, 
+from April to the start of December. ^[https://trondheimbysykkel.no/en/faq]  
+We therefore focus our analysis on the months between April and November.
+
+```{r filter_dates, results=FALSE}
+# Create a new column with the month of each trip start date
+data <- data %>%
+  mutate(start_month = month(started_at))
+
+# Count the number of rows in the original dataframe
+before_date_filter <- nrow(data)
+before_date_filter
+
+# Filter the trips for the months between April and November
+data_filtered <- data %>%
+  filter(start_month >= 4 & start_month <= 11)
+
+# Count the number of rows in the filtered dataframe
+after_date_filter <- nrow(data_filtered)
+after_date_filter
+
+# Calculate the number of removed trips
+row_removed <- before_date_filter - after_date_filter
+row_removed
+```
+
+We removed `r row_removed` trips from our dataset.
+
+### Number of stations -TO RUN-
+
+```{r num_stations, results=FALSE}
+# Count the number of stations in each city
+num_stations_per_city <- data %>%
+  group_by(city) %>%
+  summarize(num_stations = n_distinct(start_station_id)) %>%
+  pull(num_stations)
+
+# Store the number of stations per city in a separate variable
+num_stations_bergen <- num_stations_per_city[1]
+num_stations_oslo <- num_stations_per_city[2]
+num_stations_trondheim <- num_stations_per_city[3]
+```
+The number of stations for each city is summarized in the following table:
+
+City  | Number of stations
+-|-
+Bergen | `r num_stations_bergen`
+Oslo | `r num_stations_oslo`
+Trondheim | `r num_stations_trondheim`
+
+To narrow our analysis furthermore, we will only consider the data coming from the top 20 stations in each city.
+
+```{r top_20, results = FALSE}
+# Group the data by city and station ID, and calculate the number of trips
+trips_by_station <- data %>%
+  group_by(city, start_station_id) %>%
+  summarize(num_trips = n()) 
+
+# Sort the data by city and num_trips, and keep only the top 20 stations for each city
+top_stations <- trips_by_station %>%
+  arrange(city, desc(num_trips)) %>%
+  group_by(city) %>%
+  top_n(20)
+
+# Filter the original dataset to keep only trips from the top stations
+data_top_stations <- data %>%
+  semi_join(top_stations, by = c("city", "start_station_id"))
+
+before_top20 <- nrow(data)
+after_top20 <- nrow(data_top_stations)
+removed_top20 <- before_top20 - after_top20
+
+data <- data_top_stations
+```
+We removed `r removed_top20` trips from our dataset, which then contained `r after_top20` trips.
+
 ### Time of rental
 
-```{r time_col}
+```{r time_col, eval=false}
 data_mod <- data %>% mutate(start = as.ITime(started_at)) %>%
   mutate(end = as.ITime(ended_at))
 head(data_mod)
@@ -97,7 +207,7 @@ from April to the start of December. ^[https://trondheimbysykkel.no/en/faq]
 
 __I (Elise) want to check that this info fits our data.__
 
-```{r time_trips}
+```{r time_trips, eval=FALSE}
 
 # Bergen
 # There should be no data between midnight and 5am.
@@ -113,40 +223,6 @@ oslo <- data %>% filter(city == "Oslo")
 # Trondheim
 # There should be no data for the months January to March. and some data available during the night.
 trondheim <- data %>% filter(city == "Trondheim")
-
-
-
-
-
-```
-
-
-
-## Duration of trips
-
-```{r duration_nb, results = FALSE}
-short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
-short_trips
-long_trips <- nrow(subset(data, duration >= 86400))
-long_trips
-
-data_mod <- data_mod[!(data_mod$duration <= 120 & data_mod$start_station_id == data_mod$end_station_id) & !(data_mod$duration >= 86400), ]
-
-max(data_mod$duration)
-```
-
-The duration of each trips is indicated in seconds.   
-We removed `r short_trips` trips 
-which lasted 2 min or less with the same start and end station. They probably correspond 
-to users picking up a bike and immediately returning it. We also focused on trips lasting less than 24 hours 
-and therefore removed `r long_trips` trips from our dataset.
-
-__box plot is not the best... we need to do it better__
-```{r duration_plot}
-data_mod %>% 
-  ggplot(mapping = aes(x = city, y = duration)) + 
-    geom_boxplot() +
-    labs(title = "Distribution of the trips duration")
 ```
 
 
@@ -210,6 +286,56 @@ Let me know what you guys think.
 ```
 
 # Linear Model
+
+## Is the duration of the trip and impacted by the weather?
+
+We start with a linear regression to explore the relationship between the duration of the trip
+and the temperature and precipitation. 
+
+how much of the variation in trip duration can be explained by changes in temperature and precipitation?
+
+```{r simple_lm}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables
+simple_lm <- lm(duration ~ temp + prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm)
+```
+
+```{r simple_lm_plot, fig.show='hold', out.width="49%"}
+
+# Create the first plot: temperature vs. duration
+plot1 <- ggplot(data, aes(x = temp, y = duration)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Temperature", y = "Duration")
+
+# Create the second plot: precipitation vs. duration
+plot2 <- ggplot(data, aes(x = prcp, y = duration)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Precipitation", y = "Duration")
+
+# Display the two plots side-by-side
+gridExtra::grid.arrange(plot1, plot2, ncol = 2)
+```
+
+
+
+
+
+```{r simple_lm_prediction}
+#### NOT RUN YET
+
+# Create a data frame with the observed and predicted values
+pred_df <- data.frame(duration = data$duration,
+                      predicted = predict(simple_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
 
 # Generalised Linear Model with family set to Poisson
 
