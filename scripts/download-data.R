@@ -77,6 +77,7 @@ trips <- trips %>%
 # write to file (complete)
 write.csv(trips, "data/trips.csv", row.names = FALSE)
 
+
 # subset for smaller file size
 trips_col_subset <- trips %>% 
   select(
