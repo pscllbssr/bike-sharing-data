@@ -351,6 +351,7 @@ simple_lm <- lm(duration ~ temp + prcp, data = data)
 summary(simple_lm)
 ```
 The temperature seems to have a significant positive correlation with the duration of trips and rain seems to correlate with a reduced duration of trips. While the model is significant, it does not fit the dataset optimally: the R^2 is only of `r summary(simple_lm)$r.squared`.
+<<<<<<< HEAD
 
 When including the interaction between the temperature and precipitations, the model looks as follow:
 
@@ -364,6 +365,21 @@ summary(simple_lm_interaction)
 
 The interaction between the temperature and precipitations shows no significance.
 
+=======
+
+When including the interaction between the temperature and precipitations, the model looks as follow:
+
+```{r simple_lm_interaction}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables, including their interaction
+simple_lm_interaction <- lm(duration ~ temp * prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm_interaction)
+```
+
+The interaction between the temperature and precipitations shows no significance.
+
+>>>>>>> 819775ec1ae10569ce7cb8396f83b4905934c1d4
 ```{r simple_lm_prediction}
 # Create a data frame with the observed and predicted values
 pred_df <- data.frame(duration = data$duration,
@@ -373,6 +389,7 @@ pred_df <- data.frame(duration = data$duration,
 ggplot(pred_df, aes(x = predicted, y = duration)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+<<<<<<< HEAD
   labs(x = "Predicted duration", y = "Observed duration")
 ```
 
@@ -401,6 +418,36 @@ ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
   labs(x = "Predicted duration", y = "Observed duration")
 ```
 
+=======
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+The relationship between temperature, precipitations and trip durations is not linear.
+We can try non-linear relationships such as polynomials.
+
+```{r quad_lm}
+# Fit a quadratic model 
+quad_lm <- lm(duration ~ temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2), data = data)
+# Print the model summary
+summary(quad_lm)
+
+# F-test between quadratic model and simple linear model
+anova(simple_lm, quad_lm)
+```
+
+```{r  plot_quad_lm}
+# Create a data frame with the observed and predicted values
+pred_quad_df <- data.frame(duration = data$duration,
+                      predicted = predict(quad_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+>>>>>>> 819775ec1ae10569ce7cb8396f83b4905934c1d4
 I just want to see what type of relationships are present and let r plot the smooth line without indicating a method.
 
 ```{r lm_plots, fig.show='hold', out.width="49%"}
