@@ -24,6 +24,7 @@ library(lubridate)
 library(kableExtra) # to render tables in html
 install.packages("gridExtra")
 library(gridExtra)
+install.packages("ggplot2")
 library(ggplot2)
 library(dplyr)
 
@@ -351,6 +352,7 @@ simple_lm <- lm(duration ~ temp + prcp, data = data)
 summary(simple_lm)
 ```
 The temperature seems to have a significant positive correlation with the duration of trips and rain seems to correlate with a reduced duration of trips. While the model is significant, it does not fit the dataset optimally: the R^2 is only of `r summary(simple_lm)$r.squared`.
+<<<<<<< HEAD
 
 When including the interaction between the temperature and precipitations, the model looks as follow:
 
@@ -364,6 +366,21 @@ summary(simple_lm_interaction)
 
 The interaction between the temperature and precipitations shows no significance.
 
+=======
+
+When including the interaction between the temperature and precipitations, the model looks as follow:
+
+```{r simple_lm_interaction}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables, including their interaction
+simple_lm_interaction <- lm(duration ~ temp * prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm_interaction)
+```
+
+The interaction between the temperature and precipitations shows no significance.
+
+>>>>>>> 819775ec1ae10569ce7cb8396f83b4905934c1d4
 ```{r simple_lm_prediction}
 # Create a data frame with the observed and predicted values
 pred_df <- data.frame(duration = data$duration,
@@ -373,6 +390,7 @@ pred_df <- data.frame(duration = data$duration,
 ggplot(pred_df, aes(x = predicted, y = duration)) +
   geom_point() +
   geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+# <<<<<<< HEAD
   labs(x = "Predicted duration", y = "Observed duration")
 ```
 
@@ -401,6 +419,36 @@ ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
   labs(x = "Predicted duration", y = "Observed duration")
 ```
 
+=======
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+The relationship between temperature, precipitations and trip durations is not linear.
+We can try non-linear relationships such as polynomials.
+
+```{r quad_lm}
+# Fit a quadratic model 
+quad_lm <- lm(duration ~ temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2), data = data)
+# Print the model summary
+summary(quad_lm)
+
+# F-test between quadratic model and simple linear model
+anova(simple_lm, quad_lm)
+```
+
+```{r  plot_quad_lm}
+# Create a data frame with the observed and predicted values
+pred_quad_df <- data.frame(duration = data$duration,
+                      predicted = predict(quad_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+>>>>>>> 819775ec1ae10569ce7cb8396f83b4905934c1d4
 I just want to see what type of relationships are present and let r plot the smooth line without indicating a method.
 
 ```{r lm_plots, fig.show='hold', out.width="49%"}
@@ -517,7 +565,7 @@ station_220_data %>%
 
 fit the model
 
-```{r station220_avgtemp_poisson}
+```{r station220_avgtemp_poisson} 
 trips_at_220_model <- glm(trips ~ avg_temp,
   family = "poisson",
   data = station_220_data)
@@ -576,40 +624,45 @@ station_220_data %>%
 # Generalised Linear Model with family set to Binomial
 
 # Generalised Additive Model
-
+Do weather conditions affect the duration of trips? 
+ 
 ```{r}
+install.packages("dplyr")
+library(dplyr)
+
+#retrieve only data about the duration and weather parameters 
 weather <- trip %>% select(c(city,duration, temp, dwpt, prcp, snow, wpgt))
 colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")
-weather[is.na(weather)] <- 0
-str(weather)
 head(weather)
 
-ggplot(data = weather,
-       mapping = aes(y = log(Duration),
-                     x = Temperature)) +
-  geom_point() +
-geom_smooth(method = "lm")
+#remove NA values and chose relevant weather parameters
+weather_01<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])
+str(weather_01)
+head(weather_01)
 
-template.graph.weather <- ggplot(data = weather,
-                              mapping = aes(y = log(Duration))) +
+#display relationship of duration with the weather variables
+template.graph.weather <- ggplot(data = weather_01,
+                                 mapping = aes(y = log(Duration))) +
   geom_point() +
   geom_smooth()
 
 template.graph.weather + aes(x = Temperature) 
 template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
-template.graph.weather + aes(x = Snow_Depth)
-template.graph.weather + aes(x = Wind_Peak_Gust)
+
+
 
 ```
 
 ```{r}
 gam_01 <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation),
-              data = weather)
+              data = weather_01)
 summary(gam_01)
 
 plot(gam_01, residuals = TRUE, pages = 1, shade = TRUE)
 ```
+
+The GAM model states that temperature and dew_point have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have significant impact. The temperature data is rather normal distributed, the dew_point is left-side skewed and precipitation is right-skewed. 
 
 # Neural Network
 
