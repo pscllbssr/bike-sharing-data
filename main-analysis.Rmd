@@ -37,19 +37,30 @@ options(knitr.table.format = function() {
 
 Our Dataset, pls run `scripts/download-data.R` first.
 
-__Main variables:__ __TO BE COMPLETED__  
-- Time of start and end of the trip, as well as its duration (in seconds)
-- Start and end stations
-- City
-- Temperature
-- Wind
-- Amount of precipitation
-- Presence or absence of snow
-
 ```{r head_data}
 data <- fread("data/trips_s.csv")
 kable(head(data))
 ```
+
+__Main variables:__  
+
+- `started_at`: DATETIME, start of trip
+- `ended_at`: DATETIME, end of the trip
+- `duration`: INTEGER, duration of trip in seconds
+- `start_station_id`: INTEGER, identifier of start station
+- `start_station_latitude`, `start_station_longitude`: DECIMAL, DECIMAL, location of start station
+- `end_station_id`: INTEGER, identifier of end station
+- `end_station_latitude`, `end_station_longitude`: DECIMAL, DECIMAL, location of end station
+- `city`: STRING, name of city
+- `temp`: DECIMAL, approximate temperature during trip
+- `dwpt`: DECIMAL, Dew point in °C
+- `prcp`: DECIMAL, Total Precipitation in mm
+- `snow`: INTEGER, Snow Depth in mm
+- `wpgt`: DECIMAL, Wind Peak Gust in km/h
+- `tsun`: BOOLEAN, Total sunshine duration in minutes
+- `coco`: INTEGER, Weather Condition Code from 1 (clear) to 27 (storm)
+
+Details for weather variables: <https://dev.meteostat.net/formats.html#time-format>
 
 
 ```{r trips_per_city}
@@ -211,6 +222,32 @@ Let me know what you guys think.
 
 # Linear Model
 
+just try
+
+```{r}
+
+data_subset <- sample_n(data, 100000)
+model <- lm(duration ~ temp, data = data_subset %>% filter(duration < 0.5 * 60 * 60))
+
+summary(model)
+
+```
+```{r}
+data_subset %>% 
+  filter(duration < 0.5 * 60 * 60) %>% 
+  ggplot(mapping = aes(y = duration, x = temp)) +
+    geom_point()
+```
+```{r}
+
+data_subset %>% 
+  filter(duration < 0.5 * 60 * 60)%>% 
+  ggplot(mapping = aes(y = duration, x = factor(coco))) +
+    geom_boxplot()
+```
+
+
+
 # Generalised Linear Model with family set to Poisson
 
 predict how many bikes we need to have available at given station, depending on weather?, ...?
@@ -249,11 +286,15 @@ station_220_data <- station_220_data %>%
     avg_temp = mean(temp, na.rm = T),
     max_temp = max(temp, na.rm = T),
     min_temp = min(temp, na.rm = T),
+    avg_prcp = mean(prcp, na.rm = T),
+    month = month(started_trip_date)
   ) %>% 
   mutate(weekday = wday(started_trip_date, week_start=1)) 
 
 # Removing any missing values:
 station_220_data <- na.omit(station_220_data)
+
+pairs(trips ~ avg_temp + avg_prcp + month + weekday, data = station_220_data)
 ```
 see correlation with temperatures
 
@@ -265,6 +306,17 @@ station_220_data %>%
            subtitle = "station 220, Bergen",
            y = "number of trips", 
            x = "avg. temperature C°")
+
+```
+
+```{r station220_avgtemp}
+station_220_data %>% 
+  ggplot(mapping = aes(y = log(trips), x = avg_prcp)) + 
+      geom_point() +
+      labs(title = "Number of trips vs. average precipitation", 
+           subtitle = "station 220, Bergen",
+           y = "number of trips", 
+           x = "avg. precipitation")
 
 ```
 
