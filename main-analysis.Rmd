@@ -7,8 +7,10 @@ output:
     toc: yes
     toc_float: TRUE
     code_folding: hide
+editor_options:
+  chunk_output_type: console
 ---
-
+ 
 __the person who corrected my bootcamp project really loved the fact that we described what we were loading the libraries for. Do you agree to add a little structure and make some comments in it as well, as I did in the r libraries chunk?__
 
 
@@ -17,12 +19,17 @@ __the person who corrected my bootcamp project really loved the fact that we des
 # data manipulation and visualization
 library(data.table) # aggregation of large data
 library(tidyverse)
+library(lubridate)
 library(kableExtra) # to render tables in html
+library(gridExtra)
+library(ggplot2)
+library(dplyr)
 
 # machine learning libraries
 library(e1071)
-library(caret) 
+library(caret)
 library(kernlab)
+library(mgcv)
 ```
 
 ```{r setup, include=FALSE}
@@ -35,14 +42,25 @@ options(knitr.table.format = function() {
 
 # Dataset
 
+__Map of Norway with the bike sharing logos indicating each city.__
+
 Our Dataset, pls run `scripts/download-data.R` first.
+
+__Main variables:__ __TO BE COMPLETED__  
+- Time of start and end of the trip, as well as its duration (in seconds)
+- Start and end stations
+- City
+- Temperature
+- Wind
+- Amount of precipitation
+- Presence or absence of snow
 
 ```{r head_data}
 data <- fread("data/trips_s.csv")
 kable(head(data))
 ```
-
-__Main variables:__  
+ 
+__Main variables:__
 
 - `started_at`: DATETIME, start of trip
 - `ended_at`: DATETIME, end of the trip
@@ -62,6 +80,7 @@ __Main variables:__
 
 Details for weather variables: <https://dev.meteostat.net/formats.html#time-format>
 
+__show this graphes in data exploration?__
 
 ```{r trips_per_city}
 data %>% 
@@ -73,7 +92,7 @@ data %>%
 ```
 
 
-```{r trips_per_month, message = FALSE}
+```{r trips_per_month}
 data %>% 
   group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
   summarise(n = n()) %>% 
@@ -83,16 +102,159 @@ data %>%
     labs(title = "Sum of trips per city and month", y = "number of trips", x = "")
 ```
 
-## Modification of the dataset
+## Data preparation
 
 We need to modify the dataset to be able to perform our analysis.
 
+### Duration of trips -TO RUN-
+
+```{r duration_nb, results=FALSE}
+# count the number of trips that lasted 2 minutes or less and starting and ending at the same station
+short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
+short_trips
+# count the number of trips that lasted 24 hour and more
+long_trips <- nrow(subset(data, duration >= 86400))
+long_trips
+
+# remove the data concerning the "short" and long "trips"
+data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_id) & !(data$duration >= 86400), ]
+
+max(data$duration)
+```
+
+The duration of each trips is indicated in seconds.
+
+We removed `r short_trips` trips which lasted 2 min or less with the same start and end station. They probably correspond to users picking up a bike and immediately returning it. We also focused on trips lasting less than 24 hours
+and therefore removed `r long_trips` trips from our dataset.
+
+__box plot is not the best... we need to do it better__
+```{r duration_plot, eval=FALSE}
+data_mod %>%
+  ggplot(mapping = aes(x = city, y = duration)) +
+    geom_boxplot() +
+    labs(title = "Distribution of the trips duration")
+```
+
+### Retain only April to November -TO RUN-
+
+In Trondheim, the bikes are available as long as there is no ice on the ground,
+from April to the start of December. ^[https://trondheimbysykkel.no/en/faq]
+We therefore focus our analysis on the months between April and November.
+
+```{r filter_dates, results=FALSE}
+# Create a new column with the month of each trip start date
+data <- data %>%
+  mutate(start_month = month(started_at))
+
+# Count the number of rows in the original dataframe
+before_date_filter <- nrow(data)
+before_date_filter
+
+# Filter the trips for the months between April and November
+data_filtered <- data %>%
+  filter(start_month >= 4 & start_month <= 11)
+
+# Count the number of rows in the filtered dataframe
+after_date_filter <- nrow(data_filtered)
+after_date_filter
+
+# Calculate the number of removed trips
+row_removed <- before_date_filter - after_date_filter
+row_removed
+```
+
+We removed `r row_removed` trips from our dataset.
+
+We also added a column containing the day of the week as well as a column to indicate if the day belongs to the week-end. Official holydays are ignored for this analysis.
+
+```{r weekday}
+# Add a column for the day of the week
+data$weekday <- weekdays(as.Date(data$started_at))
+# Add a column
+data$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+```
+
+### Number of stations -TO RUN-
+
+```{r num_stations, results=FALSE}
+# Count the number of stations in each city
+num_stations_per_city <- data %>%
+  group_by(city) %>%
+  summarize(num_stations = n_distinct(start_station_id)) %>%
+  pull(num_stations)
+
+# Store the number of stations per city in a separate variable
+num_stations_bergen <- num_stations_per_city[1]
+num_stations_oslo <- num_stations_per_city[2]
+num_stations_trondheim <- num_stations_per_city[3]
+```
+
+The number of stations for each city is summarized in the following table:
+
+City  | Number of stations
+-|-
+Bergen | `r num_stations_bergen`
+Oslo | `r num_stations_oslo`
+Trondheim | `r num_stations_trondheim`
+
+To narrow our analysis furthermore, we will only consider the data coming from the top `top` stations in each city.
+
+```{r top_chunk, results = FALSE}
+# Group the data by city and station ID, and calculate the number of trips
+trips_by_station <- data %>%
+  group_by(city, start_station_id) %>%
+  summarize(num_trips = n())
+
+# Sort the data by city and num_trips, and keep only the top n stations for each city
+top_no <- 20
+
+top_stations <- trips_by_station %>%
+  arrange(city, desc(num_trips)) %>%
+  group_by(city) %>%
+  top_n(top_no)
+
+# Filter the original dataset to keep only trips from the top stations
+data_top_stations <- data %>%
+  semi_join(top_stations, by = c("city", "start_station_id"))
+
+before_top20 <- nrow(data)
+after_top20 <- nrow(data_top_stations)
+removed_top20 <- before_top20 - after_top20
+
+data <- data_top_stations
+```
+We removed `removed_top20` trips from our dataset, which then contained `r after_top20` trips. 
+
 ### Time of rental
 
-```{r time_col}
+```{r time_col, eval=FALSE}
 data_mod <- data %>% mutate(start = as.ITime(started_at)) %>%
   mutate(end = as.ITime(ended_at))
 head(data_mod)
+```
+
+### Missing weather data -TO RUN-
+
+Given the large number of observations still available, we decided to not take into account trips with missing temperature values.
+
+```{r missing_temp, results=FALSE}
+
+data_filtered <- data %>% filter(!is.na(temp))
+
+# Calculate the number of removed trips
+removed_temp <- nrow(data) - nrow(data_filtered)
+removed_temp
+
+data <- data_filtered
+```
+
+We removed `r removed_temp` trips with missing temperature data.
+
+After verification on the metesostat.net website, it seems that missing precipitations data corresponds to a value of 0.
+We modified our dataset accordingly.
+
+```{r precipitation}
+data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 ```
 
 
@@ -108,7 +270,7 @@ from April to the start of December. ^[https://trondheimbysykkel.no/en/faq]
 
 __I (Elise) want to check that this info fits our data.__
 
-```{r time_trips}
+```{r time_trips, eval=FALSE}
 
 # Bergen
 # There should be no data between midnight and 5am.
@@ -124,46 +286,14 @@ oslo <- data %>% filter(city == "Oslo")
 # Trondheim
 # There should be no data for the months January to March. and some data available during the night.
 trondheim <- data %>% filter(city == "Trondheim")
-
-
-
-
-
-```
-
-
-
-## Duration of trips
-
-```{r duration_nb, results = FALSE}
-short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
-short_trips
-long_trips <- nrow(subset(data, duration >= 86400))
-long_trips
-
-data_mod <- data_mod[!(data_mod$duration <= 120 & data_mod$start_station_id == data_mod$end_station_id) & !(data_mod$duration >= 86400), ]
-
-max(data_mod$duration)
-```
-
-The duration of each trips is indicated in seconds.   
-We removed `r short_trips` trips 
-which lasted 2 min or less with the same start and end station. They probably correspond 
-to users picking up a bike and immediately returning it. We also focused on trips lasting less than 24 hours 
-and therefore removed `r long_trips` trips from our dataset.
-
-__box plot is not the best... we need to do it better__
-```{r duration_plot}
-data_mod %>% 
-  ggplot(mapping = aes(x = city, y = duration)) + 
-    geom_boxplot() +
-    labs(title = "Distribution of the trips duration")
 ```
 
 
 # Weather (Elise)
 
-I started using our main dataset but because I want to summarize data per day. 
+__graphes of temperature in each city btw april and november and same with precipitations___
+
+I started using our main dataset but because I want to summarize data per day.
 I don't know how to group the data because we have a different amount of data per hour 
 with the bike rental data...
 So for now I will try with the weather_data dataframe. We can ditch all this later if 
@@ -171,10 +301,9 @@ we don't use it.
 
 ## Precipitations
 
-Here, I am checking if the na in our weather data precipitations are also na on the metesostat.net website.
-I checked 2021-08-30 3h Oslo: on the website, it is everywhere 0. So we should be fine replacing the NA by 0 for precipitation.
+__Here, I am checking if the na in our weather data precipitations are also na on the metesostat.net website.I checked 2021-08-30 3h Oslo: on the website, it is everywhere 0. So we should be fine replacing the NA by 0 for precipitation. -> see above: NA are now zeros.__
 
-```{r precip-na}
+```{r precip-na, eval=FALSE}
 # precip_na <- filter(weather_data,is.na(weather_data$prcp)) %>% arrange(desc(date))
 # head(precip_na,500)
 ```
@@ -192,35 +321,193 @@ I checked 2021-08-30 3h Oslo: on the website, it is everywhere 0. So we should b
 ```
 
 
-## Temperature
+# Linear Model (Elise)
 
-Here, I am checking if the na in our weather data temperature are also na on the metesostat.net website.
-```{r temperature-na}
-# temp_na <- filter(weather_data,is.na(weather_data$temp)) %>% arrange(desc(date))
-# length(temp_na$date)
-# temp_na %>% group_by(city,date) %>% count() %>% arrange(desc(n))
-# head(temp_na,200)
+__I am doing everything step-by-step and super detailed for now, but will only keep one model at the end__
+
+## Is the duration of the trip and impacted by the weather?
+
+We start with a linear regression to explore the relationship between the duration of the trip
+and the temperature and precipitation.
+
+how much of the variation in trip duration can be explained by changes in temperature and precipitation?
+
+We first plot the duration versus temperature and precipitation with a linear regression line.
+
+```{r simple_lm_plot, fig.show='hold', out.width="49%"}
+
+# Create the first plot: temperature vs. duration
+plot1 <- ggplot(data, aes(x = temp, y = duration)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Temperature", y = "Duration")
+
+# Create the second plot: precipitation vs. duration
+plot2 <- ggplot(data, aes(x = prcp, y = duration)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Precipitation", y = "Duration")
+
+# Display the two plots side-by-side
+gridExtra::grid.arrange(plot1, plot2, ncol = 2)
 ```
 
-There are 1'404 missing values which we could fill with fill(weather_data, temp, .direction = 'down').
-I don't know how many bike data are concerned. Another possibility, would be to just remove the bike data with missing temperature.
-If we choose to fill missing data, we would need to do it before merging the weather and bike datasets.
-Let me know what you guys think.
+We combined these 2 predictors (temperature and precipitations) in one model.
 
-```{r temperature}
-# tempe <- weather_data %>% filter(date > "2017-12-31") %>%
-#   #mutate(temp = replace_na(temp, 0)) %>%
-#   fill(temp, .direction = 'down') %>%
-#   group_by(city, year_month = as.Date(paste(format(date, "%Y-%m"), "-01", sep=""))) %>% 
-#   summarise(temp_av = mean(temp)) 
-# 
-# ggplot(data = tempe, mapping = aes(y = temp_av, x = year_month, group = city, colour = city)) + 
-#   geom_point() +
-#   geom_line() +
-#   labs(title = "Average temperature per city and month", y = "temperature in °C", x = "")
+```{r simple_lm}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables
+simple_lm <- lm(duration ~ temp + prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm)
+```
+The temperature seems to have a significant positive correlation with the duration of trips and rain seems to correlate with a reduced duration of trips. While the model is significant, it does not fit the dataset optimally: the R^2 is only of `r summary(simple_lm)$r.squared`.
+
+When including the interaction between the temperature and precipitations, the model looks as follow:
+
+```{r simple_lm_interaction_p1}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables, including their interaction
+simple_lm_interaction <- lm(duration ~ temp * prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm_interaction)
 ```
 
-# Linear Model
+The interaction between the temperature and precipitations shows no significance.
+
+=======
+
+When including the interaction between the temperature and precipitations, the model looks as follow:
+
+```{r simple_lm_interaction_p2}
+# Fit a simple linear regression model with duration as the response variable and temperature and precipitation as predictor variables, including their interaction
+simple_lm_interaction <- lm(duration ~ temp * prcp, data = data)
+
+# Summarize the results of the model
+summary(simple_lm_interaction)
+```
+
+The interaction between the temperature and precipitations shows no significance.
+
+```{r simple_lm_prediction}
+# Create a data frame with the observed and predicted values
+pred_df <- data.frame(duration = data$duration,
+                      predicted = predict(simple_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+The relationship between temperature, precipitations and trip durations is not linear.
+We can try non-linear relationships such as polynomials.
+
+```{r quad_lm_p1}
+# Fit a quadratic model
+quad_lm <- lm(duration ~ temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2), data = data)
+# Print the model summary
+summary(quad_lm)
+
+# F-test between quadratic model and simple linear model
+anova(simple_lm, quad_lm)
+```
+
+```{r  plot_quad_lm_p2}
+# Create a data frame with the observed and predicted values
+pred_quad_df <- data.frame(duration = data$duration,
+                      predicted = predict(quad_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+
+The relationship between temperature, precipitations and trip durations is not linear.
+We can try non-linear relationships such as polynomials.
+
+```{r quad_lm}
+# Fit a quadratic model
+quad_lm <- lm(duration ~ temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2), data = data)
+# Print the model summary
+summary(quad_lm)
+
+# F-test between quadratic model and simple linear model
+anova(simple_lm, quad_lm)
+```
+
+```{r  plot_quad_lm}
+# Create a data frame with the observed and predicted values
+pred_quad_df <- data.frame(duration = data$duration,
+                      predicted = predict(quad_lm))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_quad_df, aes(x = predicted, y = duration)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
+I just want to see what type of relationships are present and let r plot the smooth line without indicating a method.
+
+```{r lm_plots, fig.show='hold', out.width="49%"}
+# Create the first plot: temperature vs. duration
+plot1 <- ggplot(data, aes(x = temp, y = duration/60)) +
+  geom_point() +
+  geom_smooth() +
+  labs(x = "Temperature", y = "Duration") +
+  coord_cartesian(ylim = c(0, 60))
+
+# Create the second plot: precipitation vs. duration
+plot2 <- ggplot(data, aes(x = prcp, y = duration/60)) +
+  geom_point() +
+  geom_smooth() +
+  labs(x = "Precipitation", y = "Duration") +
+  coord_cartesian(ylim = c(0, 60))
+
+# Display the two plots side-by-side
+gridExtra::grid.arrange(plot1, plot2, ncol = 2)
+```
+
+## Effect of the week-end on the trip duration
+
+We want to evaluate if the trips during the week-end are longer than the trips during the week. We visualized this effect using a box-plot zooming on trips duration under 1 hour.
+
+```{r duration_week-end_plots}
+# Create a box plot of trip duration by weekday or week-end, zooming in the trip durations under 3600 seconds
+ggplot(data, aes(x = weekend, y = duration/60)) +
+  geom_boxplot() +
+  labs(x= "", y = "Trip Duration (minutes)") +
+  coord_cartesian(ylim = c(0, 60))
+```
+Let's integrate it in our linear model:
+```{r quad_lm_weekend}
+# Fit a quadratic model
+quad_lm_weekend <- lm(duration ~ temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend, data = data)
+# Print the model summary
+summary(quad_lm_weekend)
+
+# F-test between quadratic model and simple linear model
+anova(quad_lm, quad_lm_weekend)
+```
+The R^2 value is a bit better than before.
+
+```{r  plot_quad_lm_weekend}
+# Create a data frame with the observed and predicted values
+pred_quad_weekend_df <- data.frame(duration = data$duration,
+                      predicted = predict(quad_lm_weekend))
+
+# Create a scatter plot of observed vs. predicted values
+ggplot(pred_quad_weekend_df, aes(x = predicted, y = duration/60)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+  labs(x = "Predicted duration", y = "Observed duration")
+```
+
 
 just try
 
@@ -233,15 +520,15 @@ summary(model)
 
 ```
 ```{r}
-data_subset %>% 
-  filter(duration < 0.5 * 60 * 60) %>% 
+data_subset %>%
+  filter(duration < 0.5 * 60 * 60) %>%
   ggplot(mapping = aes(y = duration, x = temp)) +
     geom_point()
 ```
 ```{r}
 
-data_subset %>% 
-  filter(duration < 0.5 * 60 * 60)%>% 
+data_subset %>%
+  filter(duration < 0.5 * 60 * 60)%>%
   ggplot(mapping = aes(y = duration, x = factor(coco))) +
     geom_boxplot()
 ```
@@ -272,7 +559,7 @@ Seems to be station in the city center, close to university: <http://www.openstr
 
 prepare data
 
-```{r station220_data, message = False}
+```{r station220_data, message = FALSE}
 # get data for station 220
 station_220_data <- data %>% 
   filter(start_station_id == 220)
@@ -288,7 +575,7 @@ station_220_data <- station_220_data %>%
     min_temp = min(temp, na.rm = T),
     avg_prcp = mean(prcp, na.rm = T),
     month = month(started_trip_date)
-  ) %>% 
+  ) %>%
   mutate(weekday = wday(started_trip_date, week_start=1)) 
 
 # Removing any missing values:
@@ -306,17 +593,6 @@ station_220_data %>%
            subtitle = "station 220, Bergen",
            y = "number of trips", 
            x = "avg. temperature C°")
-
-```
-
-```{r station220_avgtemp}
-station_220_data %>% 
-  ggplot(mapping = aes(y = log(trips), x = avg_prcp)) + 
-      geom_point() +
-      labs(title = "Number of trips vs. average precipitation", 
-           subtitle = "station 220, Bergen",
-           y = "number of trips", 
-           x = "avg. precipitation")
 
 ```
 
@@ -381,6 +657,43 @@ station_220_data %>%
 # Generalised Linear Model with family set to Binomial
 
 # Generalised Additive Model
+Do weather conditions affect the duration of trips?
+
+```{r}
+
+#retrieve only data about the duration and weather parameters
+weather <- data %>% select(c(city,duration, temp, dwpt, prcp, snow, wpgt))
+colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")
+head(weather)
+
+#remove NA values and chose relevant weather parameters
+weather_01<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])
+str(weather_01)
+head(weather_01)
+
+#display relationship of duration with the weather variables
+template.graph.weather <- ggplot(data = weather_01,
+                                 mapping = aes(y = log(Duration))) +
+  geom_point() +
+  geom_smooth()
+
+template.graph.weather + aes(x = Temperature)
+template.graph.weather + aes(x = Dew_Point)
+template.graph.weather + aes(x = Precipitation)
+
+
+
+```
+
+```{r}
+gam_01 <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation),
+              data = weather_01)
+summary(gam_01)
+
+plot(gam_01, residuals = TRUE, pages = 1, shade = TRUE)
+```
+
+The GAM model states that temperature and dew_point have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have significant impact. The temperature data is rather normal distributed, the dew_point is left-side skewed and precipitation is right-skewed.
 
 # Neural Network
 
