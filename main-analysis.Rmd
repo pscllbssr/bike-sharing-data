@@ -10,7 +10,7 @@ output:
 editor_options:
   chunk_output_type: console
 ---
- 
+
 __the person who corrected my bootcamp project really loved the fact that we described what we were loading the libraries for. Do you agree to add a little structure and make some comments in it as well, as I did in the r libraries chunk?__
 
 
@@ -59,8 +59,14 @@ __Main variables:__ __TO BE COMPLETED__
 data <- fread("data/trips_s.csv")
 kable(head(data))
 ```
- 
+
 __Main variables:__
+
+```{r}
+data_02 <- fread("data/trips.csv")
+kable(head(data_02))
+head(data_02)
+```
 
 - `started_at`: DATETIME, start of trip
 - `ended_at`: DATETIME, end of the trip
@@ -91,6 +97,15 @@ data %>%
     labs(title = "Number of trips per city")
 ```
 
+```{r}
+data_02 %>%
+  ggplot(mapping = aes(x = city, fill = city)) +
+    geom_bar() +
+  geom_text(aes(label = after_stat(count)), stat = 'count', nudge_y = 0.5,
+    colour = 'black',size = 3) +
+    labs(title = "Number of trips per city")
+```
+
 
 ```{r trips_per_month}
 data %>% 
@@ -112,6 +127,7 @@ We need to modify the dataset to be able to perform our analysis.
 # count the number of trips that lasted 2 minutes or less and starting and ending at the same station
 short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
 short_trips
+
 # count the number of trips that lasted 24 hour and more
 long_trips <- nrow(subset(data, duration >= 86400))
 long_trips
@@ -120,6 +136,17 @@ long_trips
 data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_id) & !(data$duration >= 86400), ]
 
 max(data$duration)
+```
+```{r}
+#same as above but with weather data
+short_trips_02 <- nrow(subset(data_02, duration <= 120 & start_station_id == end_station_id))
+short_trips_02
+
+long_trips_02 <- nrow(subset(data_02, duration >= 86400))
+long_trips_02
+
+data_02 <- data_02[!(data_02$duration <= 120 & data_02$start_station_id == data_02$end_station_id) & !(data_02$duration >= 86400), ]
+max(data_02$duration)
 ```
 
 The duration of each trips is indicated in seconds.
@@ -134,6 +161,7 @@ data_mod %>%
     geom_boxplot() +
     labs(title = "Distribution of the trips duration")
 ```
+
 
 ### Retain only April to November -TO RUN-
 
@@ -162,6 +190,29 @@ after_date_filter
 row_removed <- before_date_filter - after_date_filter
 row_removed
 ```
+```{r}
+#SAME as above but with weather data
+# Create a new column with the month of each trip start date
+data_02 <- data_02 %>%
+  mutate(start_month = month(started_at))
+
+# Count the number of rows in the original dataframe
+before_date_filter_02 <- nrow(data_02)
+before_date_filter_02
+
+# Filter the trips for the months between April and November
+data_filtered_02 <- data_02 %>%
+  filter(start_month >= 4 & start_month <= 11)
+
+# Count the number of rows in the filtered dataframe
+after_date_filter_02 <- nrow(data_filtered)
+after_date_filter_02
+
+# Calculate the number of removed trips
+row_removed_02 <- before_date_filter - after_date_filter
+row_removed_02
+```
+
 
 We removed `r row_removed` trips from our dataset.
 
@@ -173,6 +224,15 @@ data$weekday <- weekdays(as.Date(data$started_at))
 # Add a column
 data$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
 ```
+
+```{r}
+#SAME as above but with weather data
+# Add a column for the day of the week
+data_02$weekday <- weekdays(as.Date(data$started_at))
+# Add a column
+data_02$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+```
+
 
 ### Number of stations -TO RUN-
 
@@ -222,8 +282,39 @@ after_top20 <- nrow(data_top_stations)
 removed_top20 <- before_top20 - after_top20
 
 data <- data_top_stations
+
 ```
-We removed `removed_top20` trips from our dataset, which then contained `r after_top20` trips. 
+We removed `removed_top20` trips from our dataset, which then contained `r after_top20` trips.
+
+```{r}
+#SAME as above but with weather data
+# Group the data by city and station ID, and calculate the number of trips
+trips_by_station_02 <- data_02 %>%
+  group_by(city, start_station_id) %>%
+  summarize(num_trips = n())
+
+# Sort the data by city and num_trips, and keep only the top n stations for each city
+top = 20
+
+top_stations_02 <- trips_by_station_02 %>%
+  arrange(city, desc(num_trips)) %>%
+  group_by(city) %>%
+  top_n(top)
+
+# Filter the original dataset to keep only trips from the top stations
+data_top_stations_02 <- data_02 %>%
+  semi_join(top_stations_02, by = c("city", "start_station_id"))
+
+before_top20 <- nrow(data_02)
+after_top20 <- nrow(data_top_stations_02)
+removed_top20 <- before_top20 - after_top20
+
+data_02 <- data_top_stations_02
+head(data_02)
+
+```
+
+
 
 ### Time of rental
 
@@ -231,6 +322,14 @@ We removed `removed_top20` trips from our dataset, which then contained `r after
 data_mod <- data %>% mutate(start = as.ITime(started_at)) %>%
   mutate(end = as.ITime(ended_at))
 head(data_mod)
+```
+
+
+```{r}
+#SAME as above but with weather data
+data_mod_02 <- data_02 %>% mutate(start = as.ITime(started_at)) %>%
+  mutate(end = as.ITime(ended_at))
+head(data_mod_02)
 ```
 
 ### Missing weather data -TO RUN-
@@ -248,6 +347,19 @@ removed_temp
 data <- data_filtered
 ```
 
+```{r}
+#Same as above but with weather data
+data_filtered_02 <- data_02 %>% filter(!is.na(temp))
+
+# Calculate the number of removed trips
+removed_temp_02 <- nrow(data_02) - nrow(data_filtered_02)
+removed_temp_02
+
+data_02 <- data_filtered_02
+
+```
+
+
 We removed `r removed_temp` trips with missing temperature data.
 
 After verification on the metesostat.net website, it seems that missing precipitations data corresponds to a value of 0.
@@ -257,6 +369,11 @@ We modified our dataset accordingly.
 data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 ```
 
+```{r}
+#SAME as above but with weather data
+data_02$prcp <- ifelse(is.na(data_02$prcp), 0, data_02$prcp)
+str(data_02$prcp)
+```
 
 ## Time of the trips
 
@@ -661,18 +778,17 @@ Do weather conditions affect the duration of trips?
 
 ```{r}
 
-#retrieve only data about the duration and weather parameters
-weather <- data %>% select(c(city,duration, temp, dwpt, prcp, snow, wpgt))
-colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")
+#retrieve only data about the duration and weather parameters 
+weather <- data_02 %>% select(c(city,duration, temp, dwpt, prcp, snow, wpgt,wdir,wspd))
+colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust", "Wind_direction", "Wind_spead")
 head(weather)
 
 #remove NA values and chose relevant weather parameters
-weather_01<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])
-str(weather_01)
-head(weather_01)
+weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation", "Wind_direction","Wind_spead")])
+str(weather)
 
 #display relationship of duration with the weather variables
-template.graph.weather <- ggplot(data = weather_01,
+template.graph.weather <- ggplot(data = weather,
                                  mapping = aes(y = log(Duration))) +
   geom_point() +
   geom_smooth()
@@ -680,20 +796,23 @@ template.graph.weather <- ggplot(data = weather_01,
 template.graph.weather + aes(x = Temperature)
 template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
+template.graph.weather + aes(x = Wind_direction)
+template.graph.weather + aes(x = Wind_spead)
 
 
 
 ```
 
 ```{r}
-gam_01 <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation),
-              data = weather_01)
-summary(gam_01)
+gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation) + s(Wind_direction) +s(Wind_spead),
+              data = weather)
+summary(gam)
 
-plot(gam_01, residuals = TRUE, pages = 1, shade = TRUE)
+plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
+
 ```
 
-The GAM model states that temperature and dew_point have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have significant impact. The temperature data is rather normal distributed, the dew_point is left-side skewed and precipitation is right-skewed.
+The GAM model states that temperature, dew_point, wind direction and wind spead have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have significant impact.
 
 # Neural Network
 
