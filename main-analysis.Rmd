@@ -778,7 +778,6 @@ gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation) + s(
 summary(gam)
 
 plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
-
 ```
 
 The GAM model states that temperature, dew_point, wind direction and wind spead have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have significant impact. 
@@ -806,7 +805,7 @@ print(colSums(is.na(cities))) # no missing values!
 
 set.seed(10)
 cities_subset <- rbind(
-  cities[city == 'Trondheim'][sample(nrow(cities[city == 'Trondheim']), 33300), ],
+     cities[city == 'Trondheim'][sample(nrow(cities[city == 'Trondheim']), 33300), ],
   cities[city == 'Oslo'][sample(nrow(cities[city == 'Oslo']), 33300), ],
   cities[city == 'Bergen'][sample(nrow(cities[city == 'Bergen']), 33300), ]
 )
@@ -849,6 +848,7 @@ plot(cities_svm, train_cities, latitude ~ longitude)
 ```
 
 ```{r}
+
 #evaluate the results
 conf_matrix <- confusionMatrix(test_pred, test_cities_truth)
 conf_matrix
