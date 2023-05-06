@@ -11,8 +11,6 @@ editor_options:
   chunk_output_type: console
 ---
 
-__the person who corrected my bootcamp project really loved the fact that we described what we were loading the libraries for. Do you agree to add a little structure and make some comments in it as well, as I did in the r libraries chunk?__
-
 
 ```{r libraries, message = FALSE, echo = FALSE}
 
@@ -46,43 +44,39 @@ __Map of Norway with the bike sharing logos indicating each city.__
 
 Our Dataset, pls run `scripts/download-data.R` first.
 
-__Main variables:__ __TO BE COMPLETED__  
-- Time of start and end of the trip, as well as its duration (in seconds)
-- Start and end stations
-- City
-- Temperature
-- Wind
-- Amount of precipitation
-- Presence or absence of snow
 
-```{r head_data}
+```{r head_data, cache=TRUE}
 data <- fread("data/trips_s.csv")
 kable(head(data))
 ```
 
-__Main variables:__
 
-```{r}
+```{r alt_data}
 data_02 <- fread("data/trips.csv")
 kable(head(data_02))
-head(data_02)
 ```
 
-- `started_at`: DATETIME, start of trip
-- `ended_at`: DATETIME, end of the trip
-- `duration`: INTEGER, duration of trip in seconds
-- `start_station_id`: INTEGER, identifier of start station
-- `start_station_latitude`, `start_station_longitude`: DECIMAL, DECIMAL, location of start station
-- `end_station_id`: INTEGER, identifier of end station
-- `end_station_latitude`, `end_station_longitude`: DECIMAL, DECIMAL, location of end station
-- `city`: STRING, name of city
-- `temp`: DECIMAL, approximate temperature during trip
-- `dwpt`: DECIMAL, Dew point in °C
-- `prcp`: DECIMAL, Total Precipitation in mm
-- `snow`: INTEGER, Snow Depth in mm
-- `wpgt`: DECIMAL, Wind Peak Gust in km/h
-- `tsun`: BOOLEAN, Total sunshine duration in minutes
-- `coco`: INTEGER, Weather Condition Code from 1 (clear) to 27 (storm)
+__Main variables:__
+
+| Field Name | Data Type | Description |
+| --- | --- | --- |
+| started_at | DATETIME | Start of trip |
+| ended_at | DATETIME | End of the trip |
+| duration | INTEGER | Duration of trip in seconds |
+| start_station_id | INTEGER | Identifier of start station |
+| start_station_latitude | DECIMAL | Location latitude of start station |
+| start_station_longitude | DECIMAL | Location longitude of start station |
+| end_station_id | INTEGER | Identifier of end station |
+| end_station_latitude | DECIMAL | Location latitude of end station |
+| end_station_longitude | DECIMAL | Location longitude of end station |
+| city | STRING | Name of city |
+| temp | DECIMAL | Approximate temperature during trip |
+| dwpt | DECIMAL | Dew point in °C |
+| prcp | DECIMAL | Total Precipitation in mm |
+| snow | INTEGER | Snow Depth in mm |
+| wpgt | DECIMAL | Wind Peak Gust in km/h |
+| tsun | BOOLEAN | Total sunshine duration in minutes |
+| coco | INTEGER | Weather Condition Code from 1 (clear) to 27 (storm) |
 
 Details for weather variables: <https://dev.meteostat.net/formats.html#time-format>
 
