@@ -177,10 +177,8 @@ write.csv(trips_col_subset, "data/trips_s.csv", row.names = FALSE)
 ```
 
 ```{r load_data, cache=TRUE}
-data <- fread("data/trips.csv")
-# We limit our analysis to data in 2022
-data <- trips %>% filter(year(started_at) == 2022)
-kable(head(data))
+data_raw <- fread("data/trips_2022.csv")
+kable(head(data_raw))
 ```
 
 ## Data preparation
@@ -190,6 +188,8 @@ We needed to modify the dataset to be able to perform our analysis.
 ### Duration of trips
 
 ```{r duration_nb, results=FALSE}
+data <- data_raw
+
 # count the number of trips that lasted 2 minutes or less and starting and ending at the same station
 short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
 short_trips
@@ -432,7 +432,7 @@ hour3 <- top_hours[3]
 
 There are no missing values concerning the start or the end time of the trips.  
 Our dataset contains bike trips throughout the day for almost every city. 
-We could identify 2 peak times of usage: in the morning at `r hour3`am and in the afternoon between `r hour1`pm and `r hour2`pm.
+We could identify 2 peak times of usage: in the morning at `r #hour3`am and in the afternoon between `r #hour1`pm and `r #hour2`pm.
 
 ## Number of trips per price
 
@@ -506,25 +506,25 @@ We first used a linear model using weather data (temperature and precipitation) 
 
 ```{r model_lm}
 # Fit a linear regression model with duration as the response variable and price, weekend, hour and temperature and precipitations as predictor variables
-model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend + hour + poly(hour, degree=2), data = data)
+# model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend + hour + poly(hour, degree=2), data = data)
 
 # Summarize the results of the model
-summary(model_lm)
+# summary(model_lm)
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
-This model fits our data quite well. The R^2 is of `r summary(model_lm)$r.squared`.
+This model fits our data quite well. The R^2 is of `r #summary(model_lm)$r.squared`.
 
-```{r model_lm}
+```{r model_lm_}
 # Create a data frame with the observed and predicted values
-pred_df <- data.frame(duration = data$duration,
-                      predicted = predict(model_lm))
+# pred_df <- data.frame(duration = data$duration,
+#                       predicted = predict(model_lm))
 
 # Create a scatter plot of observed vs. predicted values
-ggplot(pred_df, aes(x = predicted, y = duration)) +
-  geom_point() +
-  geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
-  labs(x = "Predicted Duration", y = "Observed Duration")
+# ggplot(pred_df, aes(x = predicted, y = duration)) +
+#   geom_point() +
+#   geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+#   labs(x = "Predicted Duration", y = "Observed Duration")
 ```
 
 # Generalised Additive Model (Emilia)
@@ -534,12 +534,12 @@ Another approach to predict the duration of the trips was to use a Generalise Ad
 ```{r gam_dataset}
 
 #retrieve only data about the duration and weather parameters 
-weather <- data %>% select(c(city, duration, temp, dwpt, prcp, snow, wpgt,wdir,wspd))
-colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust", "Wind_direction", "Wind_spead")
+weather <- data %>% select(c(city, duration, temp, dwpt, prcp, snow, wpgt))#, wdir,wspd))
+colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")#, "Wind_direction", "Wind_spead")
 head(weather)
 
 #remove NA values and chose relevant weather parameters
-weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation", "Wind_direction","Wind_spead")])
+weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])#, "Wind_direction","Wind_spead")])
 #str(weather)
 
 #display relationship of duration with the weather variables
@@ -551,12 +551,12 @@ template.graph.weather <- ggplot(data = weather,
 template.graph.weather + aes(x = Temperature)
 template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
-template.graph.weather + aes(x = Wind_direction)
-template.graph.weather + aes(x = Wind_spead)
+#template.graph.weather + aes(x = Wind_direction)
+#template.graph.weather + aes(x = Wind_spead)
 ```
 
 ```{r gam}
-gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation) + s(Wind_direction) +s(Wind_spead),
+gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), # + s(Wind_direction) +s(Wind_spead),
               data = weather)
 summary(gam)
 
@@ -576,7 +576,7 @@ First we prepare the data.
 ```{r data_GLM_Poisson}
 
 # Group the data by city and station ID, and calculate the number of trips
-trips_by_station <- data %>%
+trips_by_station <- data_raw %>%
   group_by(city, start_station_id) %>%
   summarise(num_trips = n(), 
             city = last(city)) %>% 
