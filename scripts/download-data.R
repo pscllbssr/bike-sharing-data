@@ -2,6 +2,7 @@ library(readr)
 library(glue)
 library(RCurl)
 library(dplyr)
+library(lubridate)
 
 years <- 2018:2022
 months <- sprintf("%02d", 01:12)
@@ -91,3 +92,13 @@ trips_col_subset <- trips %>%
   )
 
 write.csv(trips_col_subset, "data/trips_s.csv", row.names = FALSE)
+
+# limit to 2022
+trips_2022 <- trips_col_subset %>% 
+  filter(year(started_at) == 2022)
+
+write.csv(trips_2022, "data/trips_2022.csv", row.names = FALSE)
+
+
+
+
