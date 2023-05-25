@@ -586,7 +586,7 @@ sprintf('For every increase in one temperature we get a %.2f times increase in t
 
 # Generalised Linear Model with family set to Binomial __OPEN__
 
-# Neural Network __OPEN__
+# Neural Network (Pascal)
 
 Data preparation for the neural net
 
