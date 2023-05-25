@@ -33,6 +33,7 @@ library(e1071)
 library(caret)
 library(kernlab)
 library(mgcv)
+library(neuralnet)
 
 # geo-packages
 library("geosphere")
@@ -232,6 +233,8 @@ data$price <- ifelse(data$duration <= 3600, 0, (ceiling((data$duration - 3600) /
 
 ### Add haversine distance
 
+For each trip we add the haversine distance between the two stations. Of course following a straight line on a bike trip in a city is not possible, as there are many buildings and other obstacles. But at least it is an approximation of how far the stations are apart.  
+
 ```{r}
 data <- data %>% 
   mutate(h_distance = distHaversine(
@@ -240,6 +243,16 @@ data <- data %>%
 
 kable(head(data %>% 
   select(start_station_longitude, start_station_latitude, end_station_longitude, end_station_latitude, h_distance, duration)))
+```
+
+We can also plot the distance in relation to duration of the trips.
+
+```{r}
+data %>% 
+  sample_n(10000) %>% 
+  ggplot(mapping = aes(x = h_distance, y = duration)) +
+  geom_point() +
+  labs(x = 'Haversine distance (m)', y = 'duration (s)', title = 'Distance vs. time in bike trips')
 ```
 
 
@@ -666,6 +679,98 @@ sprintf('For every increase in one temperature we get a %.2f times increase in t
 # Generalised Linear Model with family set to Binomial
 
 # Neural Network
+
+Data preparation for the neural net
+
+```{r}
+# remove obvious round trips
+data_trips <- data %>% 
+  filter(start_station_id != end_station_id) 
+
+# select the predictors
+predictors <- c("h_distance", "temp", "prcp")
+
+# selec columns, drop NA and take random subsample of 100k trips
+data_trips <- data_trips %>% 
+  select(c("duration", predictors)) %>% 
+  drop_na() %>% 
+  sample_n(10000) 
+
+# scale
+max <- apply(data_trips, 2, max)
+min <- apply(data_trips, 2, min)
+data_trips_scaled <- as.data.frame(scale(data_trips, center = min, scale = max - min))
+
+# split train/test
+trainIndex <- createDataPartition(
+  y = data_trips_scaled$duration, 
+  p = .8,
+  list = FALSE,
+)
+train_trips <- data_trips_scaled[trainIndex,]
+test_trips <- data_trips_scaled[-trainIndex,]
+```
+
+Train baseline model, hyperparams more or less random
+
+```{r}
+# train the neural network
+trips_net <- neuralnet(duration ~ h_distance, data = train_trips, linear.output = TRUE, hidden = c(4,3))
+
+# predict results on test-set
+prediction <- compute(trips_net, test_trips)
+
+plot(trips_net)
+```
+
+see predictions of baseline model
+
+```{r}
+# calculate RMSE
+rmse <- sqrt(mean((test_trips$duration - prediction$net.result)^2))
+
+# plot prediction vs real
+plot(test_trips$duration, prediction$net.result, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Baseline Model (haversine distance)')
+
+# plot perfect prediction
+abline(0,1)
+
+# add RMSE to plot
+mtext(paste("RMSE: ", round(rmse, digits = 3)), side = 3)
+```
+
+Add temp and precip as predictors to model
+
+```{r}
+# train
+trips_net_2 <- neuralnet(duration ~ h_distance + temp + prcp, data = train_trips, linear.output = TRUE, hidden = c(4,3))
+
+# make predictions
+prediction_2 <- compute(trips_net_2, test_trips)
+
+# plot second model
+plot(trips_net_2)
+```
+
+see predictions of second model
+
+```{r}
+# calculate RMSE
+rmse_2 <- sqrt(mean((test_trips$duration - prediction_2$net.result)^2))
+
+# plot prediction vs real
+plot(test_trips$duration, prediction_2$net.result, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Model 2 (h-distance, temp, precip)')
+
+# plot perfect prediction
+abline(0,1)
+
+# add RMSE to plot
+mtext(paste("RMSE: ", round(rmse_2, digits = 3)), side = 3)
+```
+
+does not make any difference. Check with hyperparameter-tuning (caret, see ANN_Lab3_Cereals) to get best paramaters
+
+maybe rescale results got get better idea of values
 
 # Support Vector Machine
 
