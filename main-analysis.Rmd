@@ -86,99 +86,6 @@ PRES	Sea-Level Air Pressure
 
 More details concerning the labelling of the weather data is available on the [Meteostat website](https://dev.meteostat.net/formats.html#time-format).
 
-```{r download_dataset, eval=FALSE}
-
-years <- 2022
-months <- sprintf("%02d", 01:12)
-
-# download trips data in the 3 cities
-city_links <- list(Trondheim="https://data.urbansharing.com/trondheimbysykkel.no/trips/v1/{year}/{month}.csv", 
-                   Oslo="https://data.urbansharing.com/oslobysykkel.no/trips/v1/{year}/{month}.csv", 
-                   Bergen="https://data.urbansharing.com/bergenbysykkel.no/trips/v1/{year}/{month}.csv")
-
-trip_data = data.frame()
-
-for (city in names(city_links)) {
-  link <- city_links[[city]]
-  for(year in years){
-    for(month in months){
-      current_link <- glue(link)
-      if(url.exists(current_link)) {
-        message('downloading: ', current_link)
-        data <- read.csv(current_link)
-        if(nrow(data) > 0) {
-          data$city <- city
-        }
-        trip_data <- rbind(trip_data, data)
-      }
-    }
-  }
-}
-
-# download weather data for the 3 cities
-weather_station_ids <- list(Trondheim="01257", 
-                            Oslo="01492", 
-                            Bergen="01317")
-
-weather_data = data.frame()
-
-for (city in names(weather_station_ids)) {
-  id <- weather_station_ids[[city]]
-  link <- glue("https://bulk.meteostat.net/v2/hourly/{id}.csv.gz")
-  if(url.exists(link)) {
-    message('downloading: ', link)
-    data <- read_csv(link, col_names = FALSE)
-    data$city <- city
-    if(nrow(data) > 0) {
-      data$city <- city
-    }
-    weather_data <- rbind(weather_data, data)
-  }
-}
-
-colnames(weather_data) <- c("date", "hour", "temp", "dwpt", "rhum", "prcp", "snow", "wdir", "wspd", "wpgt", "pres", "tsun", "coco", "city")
-
-# merging the files
-
-## prepare
-trip_data$started_at <- as.POSIXct(trip_data$started_at)
-trip_data$ended_at <- as.POSIXct(trip_data$ended_at)
-trip_data$started_at_date <- as.Date(trip_data$started_at)
-trip_data$started_at_hour <- format(trip_data$started_at, "%H")
-
-## test the join
-left_join(trip_data[1:100,], weather_data, by = join_by(x$started_at_date == y$date, x$started_at_hour == y$hour, city), keep = TRUE) %>% 
-  select(started_at, city.x, city.y, date, hour)
-
-## join!
-trips <- left_join(trip_data, weather_data, by = join_by(x$started_at_date == y$date, x$started_at_hour == y$hour, city))
-
-## tidy up
-trips <- trips %>% 
-  select(
-    -started_at_hour,
-    -started_at_date
-  )
-
-# write to file (complete)
-write.csv(trips, "data/trips.csv", row.names = FALSE)
-
-# subset for smaller file size
-trips_col_subset <- trips %>% 
-  select(
-    -start_station_name,
-    -start_station_description,
-    -end_station_description,
-    -end_station_name,
-    -rhum,
-    -wdir,
-    -wspd,
-    -pres
-  )
-
-write.csv(trips_col_subset, "data/trips_s.csv", row.names = FALSE)
-```
-
 ```{r load_data, cache=TRUE}
 data_raw <- fread("data/trips_2022.csv")
 kable(head(data_raw))
@@ -417,28 +324,28 @@ The month with the most trips in our dataset was August.
 
 ```{r time_trips_plot, eval=FALSE}
 # Create a new variable for the hour of the day
-data$hour <- hour(data$started_at)
+data$Hour <- hour(data$started_at)
 
 # Group the data by city and hour, and calculate the count of observations
 hourly_counts <- data %>%
-  group_by(city, hour) %>%
+  group_by(city, Hour) %>%
   summarize(count = n())
 
 # Create the plot
-ggplot(hourly_counts, aes(x = hour, y = count, color = city)) +
+ggplot(hourly_counts, aes(x = Hour, y = count, color = city)) +
   geom_line() +
   geom_point() +
   labs(x = "Hour of the Day", y = "Number of Trips")
 
 # Group the data by hour, and calculate the count of observations
 hourly_counts2 <- data %>%
-  group_by(hour) %>%
+  group_by(Hour) %>%
   summarize(count = n())
 
 # Find the three hours with the maximum count
 top_hours <- hourly_counts2 %>%
   slice_max(order_by = count, n = 3) %>%
-  pull(hour)
+  pull(Hour)
 
 # Store the three hours in separate variables
 hour1 <- top_hours[1]
@@ -493,7 +400,7 @@ ggplot(data, aes(x = temp, fill = city)) +
 ```{r precipitations}
 # Calculate the mean precipitation per hour and city
 hourly_prcp <- data %>%
-  group_by(city, hour = format(started_at, "%H"), date = as.Date(started_at)) %>%
+  group_by(city, Hour = format(started_at, "%H"), date = as.Date(started_at)) %>%
   summarize(mean_prcp = mean(prcp))
 
 # Calculate the sum precipitation per day and city
@@ -522,25 +429,26 @@ We first used a linear model using weather data (temperature and precipitation) 
 
 ```{r model_lm}
 # Fit a linear regression model with duration as the response variable and price, weekend, hour and temperature and precipitations as predictor variables
-# model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend + hour + poly(hour, degree=2), data = data)
+#model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend + Hour + poly(Hour, degree=2), data = data)
+model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend, data = data)
 
 # Summarize the results of the model
-# summary(model_lm)
+summary(model_lm)
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
 This model fits our data quite well. The R^2 is of `r #summary(model_lm)$r.squared`.
 
-```{r model_lm_}
+```{r model_lm_predictions}
 # Create a data frame with the observed and predicted values
-# pred_df <- data.frame(duration = data$duration,
-#                       predicted = predict(model_lm))
+pred_df <- data.frame(duration = data$duration,
+                       predicted = predict(model_lm))
 
 # Create a scatter plot of observed vs. predicted values
-# ggplot(pred_df, aes(x = predicted, y = duration)) +
-#   geom_point() +
-#   geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
-#   labs(x = "Predicted Duration", y = "Observed Duration")
+ggplot(pred_df, aes(x = predicted, y = duration)) +
+   geom_point() +
+   geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
+   labs(x = "Predicted Duration", y = "Observed Duration")
 ```
 
 # Generalised Additive Model (Emilia)
@@ -663,9 +571,9 @@ sprintf('For every increase in one temperature we get a %.2f times increase in t
 
 ```
 
-# Generalised Linear Model with family set to Binomial
+# Generalised Linear Model with family set to Binomial __OPEN__
 
-# Neural Network
+# Neural Network __OPEN__
 
 # Support Vector Machine
 
@@ -716,8 +624,6 @@ test_cities <-  cities_subset %>% slice(-indices)
 test_cities_truth <- cities_subset %>% slice(-indices) %>% pull(city)
 ```
 
-## Linear kernel
-
 ```{r SVM_city_linear}
 cities_svm <- svm(city ~. , train_cities, kernel = "linear", scale = TRUE, cost = 10)
 
@@ -736,31 +642,6 @@ conf_matrix <- confusionMatrix(test_pred, test_cities_truth)
 conf_matrix
 ```
 
-Only 3 data points were misclassified. We built a SVM with a prediction accuracy of nearly 100%.
-__is it still the case?__
+No data points was misclassified. We built a SVM with a prediction accuracy of 100%.
 
-## Radial kernel
-
-```{r SVM_city_radial}
-cities_svm_radial <- svm(city ~. , train_cities, kernel = "radial", scale = TRUE, cost = 100)
-
-# plot classification
-plot(cities_svm_radial, train_cities, latitude ~ longitude)
-```
-
-```{r}
-#make predictions
-test_pred2 <- predict(cities_svm_radial, test_cities)
-table(test_pred2)
-```
-
-```{r}
-#evaluate the results
-conf_matrix2 <- confusionMatrix(test_pred2, test_cities_truth)
-conf_matrix2
-```
-Same results with another type of kernel.
-
-__We ignore the 3 wrong values. choose only one type of kernel???__ 
-
-# Solve an optimisation problem
+# Solve an optimisation problem __OPEN__
