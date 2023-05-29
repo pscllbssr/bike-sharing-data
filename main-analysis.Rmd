@@ -11,6 +11,15 @@ editor_options:
   chunk_output_type: console
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
+options(knitr.table.format = function() {
+  if (knitr::is_latex_output())
+    "latex" else "pipe"
+})
+
+options(scipen = 999)
+```
 
 ```{r libraries, message = FALSE, echo = FALSE}
 # data loading
@@ -39,22 +48,15 @@ library(neuralnet)
 library("geosphere")
 ```
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-options(knitr.table.format = function() {
-  if (knitr::is_latex_output())
-    "latex" else "pipe"
-})
 
-options(scipen = 999)
+# Bike sharing in Norway
+
+```{r picture, echo=FALSE, out.width="50%", fig.cap="Locations of the bike sharing systems", fig.align="center"}
+knitr::include_graphics("data/map_norway.png")
 ```
 
-# Dataset
-
-![Locations of the bike sharing systems](data/map_norway.png)
-
-This report focuses on the study of bike-sharing systems in three cities in Norway: [Bergen](https://bergenbysykkel.no/en/open-data/realtime), [Oslo](https://oslobysykkel.no/en/open-data/realtime), and [Trondheim](https://trondheimbysykkel.no/en/open-data/realtime). The analysis is based on freely available data from the year 2022, encompassing trip details and station information. We also included [weather data](https://meteostat.net/en/).  
-The bike-sharing systems operate on a docked bike model, with bikes available at official stations and returned to other official stations.  
+This report focuses on the study of bike sharing systems in three cities in Norway: [Bergen](https://bergenbysykkel.no/en/open-data/realtime), [Oslo](https://oslobysykkel.no/en/open-data/realtime), and [Trondheim](https://trondheimbysykkel.no/en/open-data/realtime). The analysis is based on freely available data from the year 2022, encompassing trip details and station information. We also included [weather data](https://meteostat.net/en/).  
+The bike sharing systems operate on a docked bike model, with bikes available at official stations and returned to other official stations.  
 The inclusion of weather data allows for a comprehensive understanding of factors influencing bike usage. The study aims to demonstrate the application of machine learning techniques to improve bike-sharing systems' efficiency and planning.
 
 Our dataset is composed of the following variables:
@@ -202,7 +204,7 @@ data$weekday <- weekdays(as.Date(data$started_at))
 data$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
 ```
 
-### Number of stations -TO RUN-
+### Number of stations
 
 ```{r num_stations, results=FALSE}
 # Count the number of stations in each city
@@ -255,7 +257,7 @@ To narrow our analysis furthermore, we only considered the data coming from the 
 We removed `removed_top` trips from our dataset, which then contained `r after_top` trips.
 
 
-### Time of rental - TO RUN -
+### Time of rental
 
 We reformated the columns containing the start and end time of the bike rentals.
 
@@ -265,7 +267,7 @@ data <- data %>% mutate(start_time = as.ITime(started_at)) %>%
 ```
 
 
-### Missing weather data -TO RUN-
+### Missing weather data
 
 Given the large number of observations still available, we decided to not take into account trips with missing temperature values.
 
@@ -310,7 +312,7 @@ trondheim_percentage <- city_percentages$percentage[city_percentages$city == "Tr
 oslo_percentage <- city_percentages$percentage[city_percentages$city == "Oslo"]
 ```
 
-The city with most of the trips in our dataset was Oslo (`r oslo_percentage` % of the observations), followed by Bergen (`r bergen_percentage` %). The data of the city of Trondheim represented `r trondheim_percentage` % of our dataset.
+The city with most of the trips in our dataset was Oslo (`r round(oslo_percentage,0)` % of the observations), followed by Bergen (`r round(bergen_percentage,0)` %). The data of the city of Trondheim represented `r round(trondheim_percentage,0)` % of our dataset.
 
 ```{r trips_per_month}
 data %>% 
@@ -335,7 +337,7 @@ The month with the most trips in our dataset was August.
 
 ## Time of the trips
 
-```{r time_trips_plot, eval=FALSE}
+```{r time_trips_plot, eval=TRUE}
 # Create a new variable for the hour of the day
 data$Hour <- hour(data$started_at)
 
@@ -368,7 +370,7 @@ hour3 <- top_hours[3]
 
 There are no missing values concerning the start or the end time of the trips.  
 Our dataset contains bike trips throughout the day for almost every city. 
-We could identify 2 peak times of usage: in the morning at `r #hour3`am and in the afternoon between `r #hour1`pm and `r #hour2`pm.
+We could identify 2 peak times of usage: in the morning at `r hour3`am and in the afternoon between `r hour1`pm and `r hour2`pm.
 
 ## Number of trips per price
 
