@@ -1,5 +1,5 @@
 ---
-title: "Analysis of bike sharing data"
+title: "Analysis of norwegian bike sharing data"
 author: "Elise Gourri, Emilia Marlene Ribeiro Peixoto, Pascal Albisser"
 date: "`r Sys.Date()`"
 output: 
@@ -62,7 +62,7 @@ The inclusion of weather data allows for a comprehensive understanding of factor
 Our dataset is composed of the following variables:
 
 | Field Name | Data Type | Description |
-| --- | --- | --- |
+| :--- | :--- | :--- |
 | started_at | DATETIME | Start of trip |
 | ended_at | DATETIME | End of the trip |
 | duration | INTEGER | Duration of trip in seconds |
@@ -89,16 +89,18 @@ PRES	Sea-Level Air Pressure
 
 More details concerning the labelling of the weather data is available on the [Meteostat website](https://dev.meteostat.net/formats.html#time-format).
 
+Our dataset looks as follow:
+
 ```{r load_data, cache=TRUE}
 data_raw <- fread("data/trips_2022.csv")
 kable(head(data_raw))
 ```
 
-## Data preparation
+# Data preparation
 
 We needed to modify the dataset to be able to perform our analysis.
 
-### Duration of trips
+## Duration of trips
 
 ```{r duration_nb, results=FALSE}
 data <- data_raw
@@ -118,20 +120,19 @@ data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_
 max(data$duration)
 ```
 
-The duration of each trips is indicated in seconds.
-
 We removed `r short_trips` trips which lasted 2 min or less and with the same start and end stations. They probably correspond to users picking up a bike and immediately returning it. None of the trips lasted more than 24 hours.
 
 __box plot is not the best... we need to do it better__
-```{r duration_plot, eval=FALSE}
+```{r duration_plot, eval=TRUE}
 data %>%
   ggplot(mapping = aes(x = city, y = duration)) +
     geom_boxplot() +
     labs(title = "Distribution of the trips duration")
 ```
+
 Most of the trips were rather short trips. Some trips lasted several hours, the longest being approximately 19 hours Oslo.
 
-### Price of the trips
+## Price of the trips
 
 We added a column containing the price per trip.
 In the 3 cities Bergen, Oslo and Trondheim, the first 60 min are free, each 15 supplementary minutes cost NOK 15 ^[https://trondheimbysykkel.no/en/how-it-works].
@@ -140,11 +141,11 @@ In the 3 cities Bergen, Oslo and Trondheim, the first 60 min are free, each 15 s
 data$price <- ifelse(data$duration <= 3600, 0, (ceiling((data$duration - 3600) / 900)) * 15)
 ```
 
-### Add haversine distance
+## Haversine distance
 
-For each trip we add the haversine distance between the two stations. Of course following a straight line on a bike trip in a city is not possible, as there are many buildings and other obstacles. But at least it is an approximation of how far the stations are apart.  
+We added the haversine distance for each trip between the start and end stations. Of course, following a straight line on a bike trip in a city is not possible, as many buildings and other obstacles exist. But this calculation at least approximates how far the stations are apart. 
 
-```{r}
+```{r haversine}
 data <- data %>% 
   mutate(h_distance = distHaversine(
     cbind(start_station_longitude, start_station_latitude),
@@ -156,21 +157,20 @@ kable(head(data %>%
 
 We can also plot the distance in relation to duration of the trips.
 
-```{r}
+```{r haversine_plot}
 data %>% 
   sample_n(10000) %>% 
   ggplot(mapping = aes(x = h_distance, y = duration)) +
   geom_point() +
-  labs(x = 'Haversine distance (m)', y = 'duration (s)', title = 'Distance vs. time in bike trips')
+  labs(x = 'Haversine distance (m)', y = 'Duration (s)', title = 'Distance vs. time in bike trips')
 ```
 
 
-### Retain only data from April to November -TO RUN-
+## Retain only data from April to November
 
 In the cities of Bergen^[https://bergenbysykkel.no/en/faq] and Oslo^[https://oslobysykkel.no/en/how-it-works], bikes are available all year round.
+In Trondheim, the bikes are available from April to the start of December^[https://trondheimbysykkel.no/en/faq]. 
 We therefore focused our analysis on the months between April and November.
-In Trondheim, the bikes are available as long as there is no ice on the ground,
-from April to the start of December^[https://trondheimbysykkel.no/en/faq].  
 
 ```{r filter_dates, results=FALSE}
 # Create a new column with the month of each trip start date
@@ -188,12 +188,11 @@ data_filtered <- data %>%
 after_date_filter <- nrow(data_filtered)
 
 # Calculate the number of removed trips
-row_removed <- before_date_filter - after_date_filter
+row_removed_month <- before_date_filter - after_date_filter
 
 data <- data_filtered
 ```
-
-We removed `r row_removed` trips from our dataset.
+We removed `r row_removed_month` trips from our dataset.
 
 We also added a column containing the day of the week as well as a column to indicate if the day belongs to the week-end. Official holidays are ignored for this analysis.
 
@@ -204,7 +203,7 @@ data$weekday <- weekdays(as.Date(data$started_at))
 data$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
 ```
 
-### Number of stations
+## Number of stations
 
 ```{r num_stations, results=FALSE}
 # Count the number of stations in each city
@@ -222,12 +221,12 @@ num_stations_trondheim <- num_stations_per_city[3]
 The number of stations for each city is summarized in the following table:
 
 City  | Number of stations
--|-
+:-|:-
 Bergen | `r num_stations_bergen`
 Oslo | `r num_stations_oslo`
 Trondheim | `r num_stations_trondheim`
 
-```{r top_chunk, results = FALSE}
+```{r top_chunk, message=FALSE}
 # Group the data by city and station ID, and calculate the number of trips
 trips_by_station <- data %>%
   group_by(city, start_station_id) %>%
@@ -252,12 +251,12 @@ removed_top <- before_top - after_top
 data <- data_top_stations
 ```
 
-To narrow our analysis furthermore, we only considered the data coming from the top `r `top_no` stations in each city.
+To narrow our analysis furthermore, we only considered the data coming from the top `r top_no` stations in each city.
 
-We removed `removed_top` trips from our dataset, which then contained `r after_top` trips.
+We removed `r removed_top` trips from our dataset, which then contained `r after_top` trips.
 
 
-### Time of rental
+## Time of rental
 
 We reformated the columns containing the start and end time of the bike rentals.
 
@@ -266,8 +265,7 @@ data <- data %>% mutate(start_time = as.ITime(started_at)) %>%
   mutate(end_time = as.ITime(ended_at))
 ```
 
-
-### Missing weather data
+## Missing weather data
 
 Given the large number of observations still available, we decided to not take into account trips with missing temperature values.
 
@@ -279,7 +277,6 @@ removed_temp <- nrow(data) - nrow(data_filtered)
 
 data <- data_filtered
 ```
-
 We removed `r removed_temp` trips with missing temperature data.
 
 After verification on the [meteostat.net website] (https://meteostat.net/en/), it seems that missing precipitations data corresponds to a value of 0.
@@ -289,7 +286,7 @@ We modified our dataset accordingly.
 data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 ```
 
-## Data exploration
+# Data exploration
 
 ```{r trips_per_city_histo}
 data %>% 
@@ -314,7 +311,7 @@ oslo_percentage <- city_percentages$percentage[city_percentages$city == "Oslo"]
 
 The city with most of the trips in our dataset was Oslo (`r round(oslo_percentage,0)` % of the observations), followed by Bergen (`r round(bergen_percentage,0)` %). The data of the city of Trondheim represented `r round(trondheim_percentage,0)` % of our dataset.
 
-```{r trips_per_month}
+```{r trips_per_month, message=FALSE}
 data %>% 
   group_by(city, year_month = paste(format(started_at, "%Y-%m"), "-01", sep="")) %>% 
   summarise(n = n()) %>% 
@@ -337,7 +334,7 @@ The month with the most trips in our dataset was August.
 
 ## Time of the trips
 
-```{r time_trips_plot, eval=TRUE}
+```{r time_trips_plot, message=FALSE}
 # Create a new variable for the hour of the day
 data$Hour <- hour(data$started_at)
 
@@ -370,7 +367,7 @@ hour3 <- top_hours[3]
 
 There are no missing values concerning the start or the end time of the trips.  
 Our dataset contains bike trips throughout the day for almost every city. 
-We could identify 2 peak times of usage: in the morning at `r hour3`am and in the afternoon between `r hour1`pm and `r hour2`pm.
+We could identify 2 peak times of usage: in the morning at `r hour2`am and in the afternoon between `r hour1`pm and `r hour3`pm.
 
 ## Number of trips per price
 
@@ -381,38 +378,60 @@ ggplot(data, aes(x = price, fill = city)) +
   scale_fill_discrete(name = "City") +
   theme_minimal()
 
-free_trips <- round(sum(data$duration <= 3600) / nrow(data) * 100,1)
+free_trips <- round(sum(data$duration <= 3600) / nrow(data) * 100,0)
 ```
-Most of the trips last under 60 min (`r free_trips`%) and are included in the basis subscription.
+Most of the trips last under 60 min (`r free_trips`%) and are free (included in the basis subscription).
 
-# Weather
+## Weather
 
 Evolution of the temperature and precipitations in Bergen, Oslo and Trondheim between April 2022 and November 2022.
 
-## Temperature
+### Temperature
 
-```{r daily_temp}
+```{r daily_temp, message=FALSE}
 # Calculate the mean temperature per city and day
 daily_temp <- data %>%
-  group_by(city, started_at) %>%
+  mutate(started_day = as.Date(started_at)) %>%
+  group_by(city, started_day) %>%
   summarize(mean_temp = mean(temp))
 
 # Plot temperature by city
-ggplot(daily_temp, aes(x = started_at, y = mean_temp, color = city)) +
+ggplot(daily_temp, aes(x = started_day, y = mean_temp, color = city)) +
   geom_line() +
   labs(x = "Date", y = "Mean Temperature", title = "Mean Temperature by City") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
+```{r data_temp}
+# Find the row with the maximum mean temperature
+max_temp_row <- daily_temp[daily_temp$mean_temp == max(daily_temp$mean_temp), ]
+
+# Extract the city and started_at information from the row
+city_max_temp <- max_temp_row$city
+day_max_temp <- max_temp_row$started_day
+max_temp <- round(max_temp_row$mean_temp,1)
+
+mean_temp_Bergen <- round(mean(daily_temp$mean_temp[daily_temp$city == "Bergen"]),1)
+mean_temp_Oslo <- round(mean(daily_temp$mean_temp[daily_temp$city == "Oslo"]),1)
+mean_temp_Trondheim <- round(mean(daily_temp$mean_temp[daily_temp$city == "Trondheim"]),1)
+```
+
+The maximum temperature was reached in `r city_max_temp` with `r max_temp` on `r day_max_temp`.
+The mean temperature is for each city is displayed in the following graph as a vertical line.
+
 ```{r temperature_trips}
 ggplot(data, aes(x = temp, fill = city)) +
   geom_histogram(binwidth = 1, color = "black", position = "identity") +
-  labs(x = "Temperature (°C)", y = "Number of Observations", title = "Number of Observations per Temperature")
+  labs(x = "Temperature (°C)", y = "Number of Observations", title = "Number of Observations per Temperature") +
+  geom_vline(aes(xintercept = mean_temp_Bergen), linetype = "dashed", color = "red", size = 1) +
+  geom_vline(aes(xintercept = mean_temp_Oslo), linetype = "dashed", color = "green", size = 1) +
+  geom_vline(aes(xintercept = mean_temp_Trondheim), linetype = "dashed", color = "blue", size = 1)
 ```
+Most of the bike trips occured when the temperature was above 10°C.
 
-## Precipitations
+### Precipitations
 
-```{r precipitations}
+```{r precipitations, message=FALSE}
 # Calculate the mean precipitation per hour and city
 hourly_prcp <- data %>%
   group_by(city, Hour = format(started_at, "%H"), date = as.Date(started_at)) %>%
@@ -430,7 +449,7 @@ ggplot(daily_prcp, aes(x = date, y = sum_prcp, color = city)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-```{r precipitations_trips, message = FALSE, eval=FALSE}
+```{r precipitations_trips, message=FALSE, eval=FALSE}
  
 ggplot(data, aes(x = prcp, fill = city)) +
   geom_histogram(binwidth = 1, color = "black", position = "identity") +
@@ -440,7 +459,7 @@ ggplot(data, aes(x = prcp, fill = city)) +
 
 # Linear Model: trip duration (Elise)
 
-We first used a linear model using weather data (temperature and precipitation) as well as the day (weekday or weekend) as well as the time of the day to predict the duration of the trips.
+We first used a linear model using weather data (temperature and precipitation) as well as the day (weekday or weekend) to predict the duration of the trips.
 
 ```{r model_lm}
 # Fit a linear regression model with duration as the response variable and price, weekend, hour and temperature and precipitations as predictor variables
@@ -452,7 +471,7 @@ summary(model_lm)
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
-This model fits our data quite well. The R^2 is of `r #summary(model_lm)$r.squared`.
+This model fits our data quite well. The R^2 is of `r round(summary(model_lm)$r.squared,2)`.
 
 ```{r model_lm_predictions}
 # Create a data frame with the observed and predicted values
@@ -468,18 +487,16 @@ ggplot(pred_df, aes(x = predicted, y = duration)) +
 
 # Generalised Additive Model (Emilia)
 
-Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM) to study how the  weather conditions affect the duration of trips.
+Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study how the  weather conditions affect the duration of trips.
 
-```{r gam_dataset}
+```{r gam_dataset, message=FALSE}
 
 #retrieve only data about the duration and weather parameters 
 weather <- data %>% select(c(city, duration, temp, dwpt, prcp, snow, wpgt))#, wdir,wspd))
-colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")#, "Wind_direction", "Wind_spead")
-head(weather)
+colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")
 
 #remove NA values and chose relevant weather parameters
-weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])#, "Wind_direction","Wind_spead")])
-#str(weather)
+weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])
 
 #display relationship of duration with the weather variables
 template.graph.weather <- ggplot(data = weather,
@@ -490,8 +507,6 @@ template.graph.weather <- ggplot(data = weather,
 template.graph.weather + aes(x = Temperature)
 template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
-#template.graph.weather + aes(x = Wind_direction)
-#template.graph.weather + aes(x = Wind_spead)
 ```
 
 ```{r gam}
@@ -504,16 +519,49 @@ plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
 
 The GAM model states that temperature, dew_point, wind direction and wind speed have a significant effect on the duration of a bike trip. Whereas, the precipitation doesn't seem to have a significant impact.
 
-__Conclusions, also with regard to linear model??__
+# Generalised Additive Model (Emilia) with same variables as linear model
+
+Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study how the  weather conditions affect the duration of trips.
+
+```{r gam_dataset2, message=FALSE}
+
+#retrieve only data about the duration and weather parameters 
+weather <- data %>% select(c(duration, temp, prcp, price, weekend))
+colnames(weather) <- c("Duration", "Temperature", "Precipitation", "Price", "Weekend")
+
+#remove NA values and chose relevant weather parameters
+weather<- na.omit(weather[, c("Duration", "Temperature", "Precipitation", "Price", "Weekend")])
+
+#display relationship of duration with the weather variables
+template.graph.weather <- ggplot(data = weather,
+                                 mapping = aes(y = log(Duration))) +
+  geom_point() +
+  geom_smooth()
+
+template.graph.weather + aes(x = Temperature)
+template.graph.weather + aes(x = Precipitation)
+template.graph.weather + aes(x = Price)
+template.graph.weather + aes(x = Weekend)
+```
+
+```{r gam2}
+gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Price) + Weekend,
+              data = weather)
+summary(gam)
+
+plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
+```
+
+The GAM model states that the temperature, the precipitations, the price and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with a linear model. However, the linear model performed better.
 
 # Generalised Linear Model with family set to Poisson (Pascal)
 
-predict how many bikes we need to have available at given station. 
+We wanted to predict the number of available bikes needed at a given station depending on the temperature. We used a Generalised Linear Model with the family Poisson to achieve this.  
 
-First we prepare the data.
+Some further data preparation was needed. We calculated the number of outgoing trips at each station and kept the 6 stations with the most trips.
+This model also takes into account the summer vacations between June 18th and August 21th.
 
 ```{r data_GLM_Poisson}
-
 # Group the data by city and station ID, and calculate the number of trips
 trips_by_station <- data_raw %>%
   group_by(city, start_station_id) %>%
@@ -522,17 +570,11 @@ trips_by_station <- data_raw %>%
   arrange(desc(num_trips)) 
 
 # show stations with most trips
-kable(head(trips_by_station, 10))
-
-head(trips_by_station)
+kable(head(trips_by_station, 6))
 ```
 
-
-Outgoing trips per station
-
-```{r}
-
-# limit to top 10 stations
+```{r outgoing_trips, message=FALSE}
+# limit to top 6 stations
 top_station_ids <- trips_by_station$start_station_id[1:6] 
 summer_vacation_int <- interval(ymd("2022-06-18"), ymd("2022-08-21"))
 
@@ -555,24 +597,22 @@ trips_per_station <- data %>%
     )
 ```
 
-Plot correlation
+We plotted the correlation between the average daily temperature at the start of the trips at each station and the number of trips.
 
-```{r}
+```{r glm_plot, message=FALSE}
 trips_per_station %>%
   ggplot(mapping = aes(y = trips, x = avg_temp)) + 
   facet_wrap(~start_station_id) + 
   geom_point() +
   stat_smooth(method = "glm", method.args = list(family = 'poisson'), colour = '#F8766D') +
-  labs(title = "Number of trips vs. average temperature", 
+  labs(title = "Number of Trips vs. Average Temperature", 
        subtitle = 'At 6 most frequented stations',
-       y = "number of trips", 
-       x = "avg. temperature C°")
+       y = "Number of trips", 
+       x = "Avg. temperature C°")
 ```
 
-Make model
 
 ```{r}
-
 trips_per_temp_glm <- glm(trips ~ avg_temp + factor(start_station_id)-1,
                      family = "poisson",
                      data = trips_per_station)
@@ -585,6 +625,9 @@ glm_temp_coef <- exp(coef(trips_per_temp_glm)['avg_temp'])
 sprintf('For every increase in one temperature we get a %.2f times increase in trips a day.', glm_temp_coef)
 
 ```
+
+__Interpretaiton of the GLM model output?? How well does it perform???__
+For every increase of 1°C, we get a `r glm_temp_coef`% times increase in the number of trips a day.
 
 # Generalised Linear Model with family set to Binomial __OPEN__
 
@@ -752,3 +795,5 @@ conf_matrix
 No data points was misclassified. We built a SVM with a prediction accuracy of 100%.
 
 # Solve an optimisation problem __OPEN__
+
+# Conclusion
