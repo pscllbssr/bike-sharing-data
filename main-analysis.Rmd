@@ -631,6 +631,26 @@ For every increase of 1°C, we get a `r glm_temp_coef`% times increase in the nu
 
 # Generalised Linear Model with family set to Binomial __OPEN__
 
+```{r}
+data <- data %>% 
+  mutate(round_trip = start_station_id == end_station_id)
+```
+
+```{r}
+data %>% 
+  ggplot(mapping = aes(x = factor(start_station_id), fill = round_trip)) +
+    geom_bar()
+```
+
+```{r}
+glm_binomial <- glm(round_trip ~ city - 1 + weekend + temp,
+                     family = "binomial",
+                     data = data)
+
+summary(glm_binomial)
+```
+
+
 # Neural Network (Pascal)
 
 Data preparation for the neural net
