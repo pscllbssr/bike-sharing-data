@@ -776,6 +776,17 @@ mtext(paste("RMSE: ", round(rmse_tuned, digits = 3), " (", round(rmse_tuned_resc
 
 By adding more predictors, layers and neurons the RMSE decreased only a little bit, from `r round(rmse_rescaled, 3)` to `r round(rmse_tuned_rescaled, 3)`. This shows that the haversine distance still is the main predictor for the duration of a trip. And means we might as well use the simple baseline model.
 
+```{r}
+
+# predict 100m
+predict_100 <- compute(trips_net, as.data.frame(scale(data.frame(h_distance = c(1000)), center = min['h_distance'], scale = max['h_distance'] - min['h_distance'])))
+
+predict_100 <- predict_100$net.result * (max['duration'] - min['duration']) + min['duration']
+
+```
+
+According to the model a biker needs roughly `r round(predict_100)` seconds or ~`r round(predict_100 / 60)` minutes for 1km airline distance, including time for setting up and parking the bike at the end.
+
 # Support Vector Machine
 
 We tested if a Support Vector Machine could help predict the city based on the latitude and longitude of the stations.
