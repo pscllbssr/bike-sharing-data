@@ -462,16 +462,15 @@ ggplot(data, aes(x = prcp, fill = city)) +
 We first used a linear model using weather data (temperature and precipitation) as well as the day (weekday or weekend) to predict the duration of the trips.
 
 ```{r model_lm}
-# Fit a linear regression model with duration as the response variable and price, weekend, hour and temperature and precipitations as predictor variables
-#model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend + Hour + poly(Hour, degree=2), data = data)
-model_lm <- lm(duration ~ price + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend, data = data)
+# Fit a linear regression model with duration as the response variable and weekend, distance, temperature and precipitations as predictor variables
+model_lm <- lm(duration ~ h_distance + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend, data = data)
 
 # Summarize the results of the model
 summary(model_lm)
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
-This model fits our data quite well. The R^2 is of `r round(summary(model_lm)$r.squared,2)`.
+However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)`.
 
 ```{r model_lm_predictions}
 # Create a data frame with the observed and predicted values
@@ -526,11 +525,11 @@ Another approach to predict the duration of the trips was to use a Generalise Ad
 ```{r gam_dataset2, message=FALSE}
 
 #retrieve only data about the duration and weather parameters 
-weather <- data %>% select(c(duration, temp, prcp, price, weekend))
-colnames(weather) <- c("Duration", "Temperature", "Precipitation", "Price", "Weekend")
+weather <- data %>% select(c(duration, temp, prcp, h_distance, weekend))
+colnames(weather) <- c("Duration", "Temperature", "Precipitation", "Distance", "Weekend")
 
 #remove NA values and chose relevant weather parameters
-weather<- na.omit(weather[, c("Duration", "Temperature", "Precipitation", "Price", "Weekend")])
+weather<- na.omit(weather[, c("Duration", "Temperature", "Precipitation", "Distance", "Weekend")])
 
 #display relationship of duration with the weather variables
 template.graph.weather <- ggplot(data = weather,
@@ -540,19 +539,19 @@ template.graph.weather <- ggplot(data = weather,
 
 template.graph.weather + aes(x = Temperature)
 template.graph.weather + aes(x = Precipitation)
-template.graph.weather + aes(x = Price)
+template.graph.weather + aes(x = Distance)
 template.graph.weather + aes(x = Weekend)
 ```
 
 ```{r gam2}
-gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Price) + Weekend,
+gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Distance) + Weekend,
               data = weather)
 summary(gam)
 
 plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that the temperature, the precipitations, the price and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with a linear model. However, the linear model performed better.
+The GAM model states that the temperature, the precipitations, the distance and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with the linear model used above. However, the GAM performs better:the R^2 is of `r round(summary(gam)$r.squared,2)`.
 
 # Generalised Linear Model with family set to Poisson (Pascal)
 
@@ -629,20 +628,28 @@ sprintf('For every increase in one temperature we get a %.2f times increase in t
 __Interpretaiton of the GLM model output?? How well does it perform???__
 For every increase of 1°C, we get a `r glm_temp_coef`% times increase in the number of trips a day.
 
+
 # Generalised Linear Model with family set to Binomial __OPEN__
 
-```{r}
+```{r round_trip}
+#new BOOLEAN variable: round_trip
 data <- data %>% 
   mutate(round_trip = start_station_id == end_station_id)
+
+# Count the proportions of observations with round_trip as TRUE
+percent_round_trip <- round((sum(data$round_trip == TRUE) / nrow(data)) * 100,0)
 ```
 
-```{r}
+We introduced a new variable in our dataset to analyze round trips: trips in which the user take and return a bike at the same station. Round trips represent `r percent_round_trip`% of our dataset. 
+
+```{r round_plot}
 data %>% 
   ggplot(mapping = aes(x = factor(start_station_id), fill = round_trip)) +
     geom_bar()
 ```
 
-```{r}
+We use a generalized linear model with family set to binomial to analyze how the different cities, the distinction between weekday or weekend and the temperature influence the likellihood of a trip to be a roundtrip.
+```{r binomial_round}
 glm_binomial <- glm(round_trip ~ city - 1 + weekend + temp,
                      family = "binomial",
                      data = data)
@@ -650,6 +657,7 @@ glm_binomial <- glm(round_trip ~ city - 1 + weekend + temp,
 summary(glm_binomial)
 ```
 
+__INTERPRETATION__
 
 # Neural Network (Pascal)
 
