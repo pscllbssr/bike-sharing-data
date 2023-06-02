@@ -470,7 +470,7 @@ summary(model_lm)
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
-However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)`.
+However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm$residuals^2)), 2)`.
 
 ```{r model_lm_predictions}
 # Create a data frame with the observed and predicted values
@@ -508,7 +508,7 @@ template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
 ```
 
-```{r gam}
+```{r gam, cache=TRUE}
 gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), # + s(Wind_direction) +s(Wind_spead),
               data = weather)
 summary(gam)
@@ -543,15 +543,15 @@ template.graph.weather + aes(x = Distance)
 template.graph.weather + aes(x = Weekend)
 ```
 
-```{r gam2}
-gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Distance) + Weekend,
+```{r gam2, cache=TRUE}
+model_gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Distance) + Weekend,
               data = weather)
-summary(gam)
+summary(model_gam)
 
-plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
+plot(model_gam, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that the temperature, the precipitations, the distance and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with the linear model used above. However, the GAM performs better:the R^2 is of `r round(summary(gam)$r.squared,2)`.
+The GAM model states that the temperature, the precipitations, the distance and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with the linear model used above. However, the GAM performs better:the R^2 is of `r #round(summary(gam)$r.squared,2)`.
 
 # Generalised Linear Model with family set to Poisson (Pascal)
 
@@ -661,9 +661,12 @@ __INTERPRETATION__
 
 # Neural Network (Pascal)
 
-Data preparation for the neural net
+We also want to see if we can get a better estimation of the trip duration with a neural net. In order to do this we first scale our dataset and split in a test- and train-part. 
 
-```{r}
+```{r prepare_neuronal_net_data}
+# fix random generator
+set.seed(6987)
+
 # remove obvious round trips
 data_trips <- data %>% 
   filter(start_station_id != end_station_id) 
@@ -673,7 +676,7 @@ predictors <- c("h_distance", "temp", "prcp")
 
 # selec columns, drop NA and take random subsample of 100k trips
 data_trips <- data_trips %>% 
-  select(c("duration", predictors)) %>% 
+  select(c("duration", all_of(predictors))) %>% 
   drop_na() %>% 
   sample_n(10000) 
 
@@ -692,66 +695,86 @@ train_trips <- data_trips_scaled[trainIndex,]
 test_trips <- data_trips_scaled[-trainIndex,]
 ```
 
-Train baseline model, hyperparams more or less random
+As a baseline model we take a very simple net consisting of one predictor (the haversine distance) and one hidden layer containing a single neuron.
 
-```{r}
+```{r nn_baseline}
 # train the neural network
-trips_net <- neuralnet(duration ~ h_distance, data = train_trips, linear.output = TRUE, hidden = c(4,3))
+trips_net <- neuralnet(duration ~ h_distance, data = train_trips, linear.output = TRUE)
 
 # predict results on test-set
 prediction <- compute(trips_net, test_trips)
 
-plot(trips_net)
+plot(trips_net, rep = "best")
 ```
 
-see predictions of baseline model
+The baseline already performs quite well, considering the obvious outliers of sightseeing trips:
 
-```{r}
+```{r nn_baseline_evaluation}
+# scale back
+prediction_rescaled <- prediction$net.result * (max['duration'] - min['duration']) + min['duration']
+duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
+
 # calculate RMSE
 rmse <- sqrt(mean((test_trips$duration - prediction$net.result)^2))
+rmse_rescaled <- sqrt(mean((duration_rescaled - prediction_rescaled)^2))
 
 # plot prediction vs real
-plot(test_trips$duration, prediction$net.result, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Baseline Model (haversine distance)')
+plot(duration_rescaled, prediction_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of Baseline model', log="xy")
 
 # plot perfect prediction
 abline(0,1)
 
 # add RMSE to plot
-mtext(paste("RMSE: ", round(rmse, digits = 3)), side = 3)
+mtext(paste("RMSE: ", round(rmse, digits = 3), " (", round(rmse_rescaled, 3), ")"), side = 3)
 ```
 
-Add temp and precip as predictors to model
+The RMSE calculated with the data scaled back lies at `r round(rmse_rescaled, 3)`. This is already better than the linear model above, although we have to consider that the training data consists only of a subset and has filtered out round trips in this case.
+  
+Now we want to see if we can achieve better results with different parameters. For this we add all available predictors and use the caret-package to try out different options of the neuronal net. 
 
-```{r}
-# train
-trips_net_2 <- neuralnet(duration ~ h_distance + temp + prcp, data = train_trips, linear.output = TRUE, hidden = c(4,3))
+```{r nn_tuning, cache=TRUE}
 
-# make predictions
-prediction_2 <- compute(trips_net_2, test_trips)
+tune_grid <- expand.grid(.layer1=c(1:2), .layer2=c(0:2), .layer3=c(0))
+models <- train(duration ~ ., 
+                data = train_trips, 
+                method = 'neuralnet', 
+                metric = 'RMSE', 
+                linear.output = TRUE,
+                tuneGrid = tune_grid,
+)
 
-# plot second model
-plot(trips_net_2)
+# extract the best model (concerning RMSE)
+trips_net_tuned <- models$finalModel
+
+# predict results on test-set
+prediction_tuned <- compute(trips_net_tuned, test_trips)
+
+# plot the winner
+plot(trips_net_tuned, rep = "best")
 ```
 
-see predictions of second model
+The predictions of the tuned model look similar to the predictions of the baseline model at first sight.
 
-```{r}
+```{r nn_tuned_evaluation}
+# scale back
+prediction_tuned_rescaled <- prediction_tuned$net.result * (max['duration'] - min['duration']) + min['duration']
+duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
+
 # calculate RMSE
-rmse_2 <- sqrt(mean((test_trips$duration - prediction_2$net.result)^2))
+rmse_tuned <- sqrt(mean((test_trips$duration - prediction_tuned$net.result)^2))
+rmse_tuned_rescaled <- sqrt(mean((duration_rescaled - prediction_tuned_rescaled)^2))
 
 # plot prediction vs real
-plot(test_trips$duration, prediction_2$net.result, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Model 2 (h-distance, temp, precip)')
+plot(duration_rescaled, prediction_tuned_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of tuned model', log="xy")
 
 # plot perfect prediction
 abline(0,1)
 
 # add RMSE to plot
-mtext(paste("RMSE: ", round(rmse_2, digits = 3)), side = 3)
+mtext(paste("RMSE: ", round(rmse_tuned, digits = 3), " (", round(rmse_tuned_rescaled, 3), ")"), side = 3)
 ```
 
-does not make any difference. Check with hyperparameter-tuning (caret, see ANN_Lab3_Cereals) to get best paramaters
-
-maybe rescale results got get better idea of values
+By adding more predictors, layers and neurons the RMSE decreased only a little bit, from `r round(rmse_rescaled, 3)` to `r round(rmse_tuned_rescaled, 3)`. This shows that the haversine distance still is the main predictor for the duration of a trip. And means we might as well use the simple baseline model.
 
 # Support Vector Machine
 
@@ -821,7 +844,5 @@ conf_matrix
 ```
 
 No data points was misclassified. We built a SVM with a prediction accuracy of 100%.
-
-# Solve an optimisation problem __OPEN__
 
 # Conclusion
