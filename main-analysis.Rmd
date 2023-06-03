@@ -633,8 +633,18 @@ sprintf('For every increase in one temperature we get a %.2f times increase in t
 __Interpretaiton of the GLM model output?? How well does it perform???__
 For every increase of 1°C, we get a `r glm_temp_coef`% times increase in the number of trips a day.
 
+<<<<<<< HEAD
 
 # Generalised Linear Model with family set to Binomial 
+=======
+<<<<<<< HEAD
+# Generalised Linear Model with family set to Binomial (Emilia)
+
+=======
+
+# Generalised Linear Model with family set to Binomial __OPEN__
+>>>>>>> aca37a06d8b27b2756dece02e81690dd7f390060
+>>>>>>> 2a770753e9bd8fcc98117e9018fd5f2c00fec4e0
 
 ```{r round_trip}
 #new BOOLEAN variable: round_trip
