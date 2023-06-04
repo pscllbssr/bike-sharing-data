@@ -526,14 +526,14 @@ template.graph.weather + aes(x = Precipitation)
 The distribution of temperature and dew point is evenly scattered through the graph. Whereas, the precipitation values are mainly available on the left side of the graph area.
 The graph of each variable seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
 
-```{r gam, cache=TRUE}
+```{r gam}
 gam_model <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), data = weather)
 summary(gam_model)
 
 plot(gam_model, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r round(summary(gam_model)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r round(summary(gam_model)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
+The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r #round(summary(gam_model)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(gam_model)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
 
 # Generalised Additive Model (Emilia) with same variables as linear model 
 
@@ -773,12 +773,20 @@ Now we want to see if we can achieve better results with different parameters. F
 ```{r nn_tuning, cache=TRUE}
 
 tune_grid <- expand.grid(.layer1=c(1:2), .layer2=c(0:2), .layer3=c(0))
+train_control <- trainControl(
+  method = 'repeatedcv',
+  number = 5,
+  repeats = 5,
+  returnResamp = 'final'
+)
+
 models <- train(duration ~ .,
                 data = train_trips,
                 method = 'neuralnet',
                 metric = 'RMSE',
                 linear.output = TRUE,
                 tuneGrid = tune_grid,
+                trControl = train_control
 )
 
 # extract the best model (concerning RMSE)
