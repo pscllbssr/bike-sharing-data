@@ -36,6 +36,7 @@ library(gridExtra)
 library(ggplot2)
 library(dplyr)
 library(scales)
+library(zoo)
 
 # machine learning libraries
 library(e1071)
@@ -89,7 +90,7 @@ PRES	Sea-Level Air Pressure
 
 More details concerning the labelling of the weather data is available on the [Meteostat website](https://dev.meteostat.net/formats.html#time-format).
 
-Our dataset looks as follow:
+Our dataset looks as follows:
 
 ```{r load_data, cache=TRUE}
 data_raw <- fread("data/trips_2022.csv")
@@ -122,12 +123,12 @@ max(data$duration)
 
 We removed `r short_trips` trips which lasted 2 min or less and with the same start and end stations. They probably correspond to users picking up a bike and immediately returning it. None of the trips lasted more than 24 hours.
 
-__box plot is not the best... we need to do it better__
 ```{r duration_plot, eval=TRUE}
 data %>%
-  ggplot(mapping = aes(x = city, y = duration)) +
-    geom_boxplot() +
-    labs(title = "Distribution of the trips duration")
+  ggplot(mapping = aes(x = city, y = duration, colour = city)) +
+    geom_violin() +
+    scale_y_continuous(trans = 'log10') +
+    labs(title = "Distribution of the trips duration", y = "Duration (log-scale)", x = "")
 ```
 
 Most of the trips were rather short trips. Some trips lasted several hours, the longest being approximately 19 hours Oslo.
@@ -153,16 +154,19 @@ data <- data %>%
 
 kable(head(data %>% 
   select(start_station_longitude, start_station_latitude, end_station_longitude, end_station_latitude, h_distance, duration)))
+
 ```
 
 We can also plot the distance in relation to duration of the trips.
 
-```{r haversine_plot}
+```{r haversine_plot, warning=FALSE}
 data %>% 
   sample_n(10000) %>% 
   ggplot(mapping = aes(x = h_distance, y = duration)) +
-  geom_point() +
-  labs(x = 'Haversine distance (m)', y = 'Duration (s)', title = 'Distance vs. time in bike trips')
+  geom_point(alpha = 1/10) +
+  scale_y_continuous(trans = 'log10') + 
+  scale_x_continuous(trans = 'log10') +
+  labs(x = 'Haversine distance (m, log-scale)', y = 'Duration (s, log-scale)', title = 'Distance vs. time in bike trips')
 ```
 
 
@@ -292,9 +296,10 @@ data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 data %>% 
   ggplot(mapping = aes(x = city, fill = city)) + 
     geom_bar() +
-  geom_text(aes(label = after_stat(count)), stat = 'count', nudge_y = 0.5,
-    colour = 'black',size = 3) +
-    labs(title = "Number of Trips per City")
+  geom_text(aes(label = after_stat(count)), stat = 'count', position = position_dodge(width = 1),
+    vjust = -0.5, size = 4) +
+  labs(title = "Number of Trips per City", y = '# trips', x = '') +
+  guides(fill = 'none')   
 ```
 
 ```{r city_percent}
@@ -309,7 +314,7 @@ trondheim_percentage <- city_percentages$percentage[city_percentages$city == "Tr
 oslo_percentage <- city_percentages$percentage[city_percentages$city == "Oslo"]
 ```
 
-The city with most of the trips in our dataset was Oslo (`r round(oslo_percentage,0)` % of the observations), followed by Bergen (`r round(bergen_percentage,0)` %). The data of the city of Trondheim represented `r round(trondheim_percentage,0)` % of our dataset.
+The city with most of the trips in our dataset was Oslo (`r round(oslo_percentage,0)`% of the observations), followed by Bergen (`r round(bergen_percentage,0)`%). The data of the city of Trondheim represented `r round(trondheim_percentage,0)`% of our dataset.
 
 ```{r trips_per_month, message=FALSE}
 data %>% 
@@ -380,6 +385,7 @@ ggplot(data, aes(x = price, fill = city)) +
 
 free_trips <- round(sum(data$duration <= 3600) / nrow(data) * 100,0)
 ```
+
 Most of the trips last under 60 min (`r free_trips`%) and are free (included in the basis subscription).
 
 ## Weather
@@ -388,17 +394,18 @@ Evolution of the temperature and precipitations in Bergen, Oslo and Trondheim be
 
 ### Temperature
 
-```{r daily_temp, message=FALSE}
+```{r daily_temp, message=FALSE, warning=FALSE}
 # Calculate the mean temperature per city and day
 daily_temp <- data %>%
   mutate(started_day = as.Date(started_at)) %>%
   group_by(city, started_day) %>%
-  summarize(mean_temp = mean(temp))
+  summarize(mean_temp = mean(temp)) %>% 
+  mutate(mean_temp_7d_avg = rollmean(mean_temp, k = 7, fill = NA))
 
 # Plot temperature by city
-ggplot(daily_temp, aes(x = started_day, y = mean_temp, color = city)) +
+ggplot(daily_temp, aes(x = started_day, y = mean_temp_7d_avg, color = city)) +
   geom_line() +
-  labs(x = "Date", y = "Mean Temperature", title = "Mean Temperature by City") +
+  labs(x = "Date", y = "Mean Temperature, 7-day rolling mean", title = "Mean Temperature by City") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
@@ -420,13 +427,18 @@ The maximum temperature was reached in `r city_max_temp` with `r max_temp` on `r
 The mean temperature is for each city is displayed in the following graph as a vertical line.
 
 ```{r temperature_trips}
+
+line_dummy <- data.frame(city = c("Bergen", "Oslo", "Trondheim"), Z = c(mean_temp_Bergen, mean_temp_Oslo, mean_temp_Trondheim))
+
 ggplot(data, aes(x = temp, fill = city)) +
   geom_histogram(binwidth = 1, color = "black", position = "identity") +
   labs(x = "Temperature (°C)", y = "Number of Observations", title = "Number of Observations per Temperature") +
-  geom_vline(aes(xintercept = mean_temp_Bergen), linetype = "dashed", color = "red", size = 1) +
-  geom_vline(aes(xintercept = mean_temp_Oslo), linetype = "dashed", color = "green", size = 1) +
-  geom_vline(aes(xintercept = mean_temp_Trondheim), linetype = "dashed", color = "blue", size = 1)
+  facet_wrap(~ city) +
+  geom_vline(data = line_dummy, aes(xintercept = Z), linetype = "dashed", linewidth = 1) +
+  guides(fill = 'none') 
+  
 ```
+
 Most of the bike trips occured when the temperature was above 10°C.
 
 ### Precipitations
@@ -489,7 +501,7 @@ ggplot(pred_df, aes(x = predicted, y = duration)) +
 Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study weather the  weather conditions affect the duration of trips.
 
 
-```{r gam_dataset, message=FALSE}
+```{r gam_dataset, message=FALSE, cache=TRUE}
 
 #retrieve only data about the duration and weather parameters 
 weather <- data %>% select(c(city, duration, temp, dwpt, prcp, snow, wpgt))
@@ -503,13 +515,14 @@ head(weather)
 #display relationship of duration with the weather variables
 template.graph.weather <- ggplot(data = weather,
                                  mapping = aes(y = log(Duration))) +
-  geom_point() +
+  geom_point(alpha = 1/10) +
   geom_smooth()
 
 template.graph.weather + aes(x = Temperature)
 template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
 ```
+
 The distribution of temperature and dew point is evenly scattered through the graph. Whereas, the precipitation values are mainly available on the left side of the graph area.
 The graph of each variable seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
 
@@ -520,9 +533,9 @@ summary(gam)
 plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r round(summary(gam)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r round(summary(gam)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
+The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r #round(summary(gam)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(gam)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
 
-# Generalised Additive Model (Emilia) with same variables as linear model
+# Generalised Additive Model (Emilia) with same variables as linear model 
 
 Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study how the  weather conditions affect the duration of trips.
 
@@ -538,7 +551,7 @@ weather<- na.omit(weather[, c("Duration", "Temperature", "Precipitation", "Dista
 #display relationship of duration with the weather variables
 template.graph.weather <- ggplot(data = weather,
                                  mapping = aes(y = log(Duration))) +
-  geom_point() +
+  geom_point(alpha = 1/10) +
   geom_smooth()
 
 template.graph.weather + aes(x = Temperature)
@@ -559,12 +572,11 @@ The GAM model states that the temperature, the precipitations, the distance and 
 
 # Generalised Linear Model with family set to Poisson (Pascal)
 
-We wanted to predict the number of available bikes needed at a given station depending on the temperature. We used a Generalised Linear Model with the family Poisson to achieve this.  
+We wanted to predict the number of available bikes needed at a given station depending on the temperature. As this is count data we used a Generalised Linear Model with the family Poisson to achieve this.  
 
-Some further data preparation was needed. We calculated the number of outgoing trips at each station and kept the 6 stations with the most trips.
-This model also takes into account the summer vacations between June 18th and August 21th.
+Some further data preparation was needed. We calculated the number of outgoing trips at each station and kept the 6 stations with the most trips. As there was as significant drop in July we also took into account the summer vacations between June 18th and August 21th.
 
-```{r data_GLM_Poisson}
+```{r data_GLM_Poisson, message=FALSE}
 # Group the data by city and station ID, and calculate the number of trips
 trips_by_station <- data_raw %>%
   group_by(city, start_station_id) %>%
@@ -614,23 +626,20 @@ trips_per_station %>%
        x = "Avg. temperature C°")
 ```
 
+When we model this over all six stations
 
-```{r}
-trips_per_temp_glm <- glm(trips ~ avg_temp + factor(start_station_id)-1,
+```{r glm_poisson_temp}
+trips_per_temp_glm <- glm(trips ~ avg_temp,
                      family = "poisson",
                      data = trips_per_station)
 summary(trips_per_temp_glm)
 ```
 
-```{r}
+```{r glm_poisson_coef}
 glm_temp_coef <- exp(coef(trips_per_temp_glm)['avg_temp'])
-
-sprintf('For every increase in one temperature we get a %.2f times increase in trips a day.', glm_temp_coef)
-
 ```
 
-__Interpretaiton of the GLM model output?? How well does it perform???__
-For every increase of 1°C, we get a `r glm_temp_coef`% times increase in the number of trips a day.
+As seen in the model output above, the temperature has a significant influence on the trips per day. For every increase of 1°C, we get a `r round(glm_temp_coef,2)` times increase in the number of trips a day.
 
 
 # Generalised Linear Model with family set to Binomial __OPEN__
@@ -671,6 +680,7 @@ coef(glm_binomial)[c("weekendWeekend", "temp")]
 
 exp(coef(glm_binomial)["weekendWeekend"])
 ```
+
 All variables present to have significant coefficients, consequently, they all  highly impact the probability of a trip being a round trip. However, if we interpret individual coefficients such as the weekend/weekday, we can determine that the odds of a round trip on a weekend is 1.94 higher than on weekday.
 
 ```{r}
@@ -854,7 +864,7 @@ cities_subset %>%
 ```
 
 
-```{r cities_dataset_split}
+```{r cities_dataset_split, warning=FALSE}
 # form training and testing datasets
 set.seed(10)
 indices <- createDataPartition(cities_subset$city, p=0.7, list=F)
@@ -872,11 +882,11 @@ test_pred <- predict(cities_svm, test_cities)
 table(test_pred)
 ```
 
-```{r}
+```{r plot_linear_svm, cache=TRUE}
 plot(cities_svm, train_cities, latitude ~ longitude)
 ```
 
-```{r}
+```{r evaluate_linear_svm}
 #evaluate the results
 conf_matrix <- confusionMatrix(test_pred, test_cities_truth)
 conf_matrix
@@ -885,6 +895,7 @@ conf_matrix
 No data points was misclassified. We built a SVM with a prediction accuracy of 100%.
 
 # Conclusion
+
 Our analysis focused on data obtained from the cities of Bergen, Oslo, and Trondheim in Norway. The initial phase of the project involved data preparation to facilitate its utilization in the subsequent models we employed.
 
 To begin with, we employed a linear model to examine the potential impact of variables such as the weekend, temperature, distance, and precipitation on the duration of bike rides. However, due to the model's inadequate fit, we decided to employ a GAM using the same variables. The results from the GAM model substantiated our initial suspicions derived from the linear model. As the R-squared value increased in the GAM model, the reliability of the results improved. We hope these findings can provide the bike rental company with a comprehensive understanding of the factors that influence their business, aiding them in their strategical decisions. Considering that revenue is generated only after 60 minutes of bike riding, identifying the factors that potentially affect profitability becomes highly relevant for the company.
@@ -895,7 +906,8 @@ Furthermore, it was imperative for us to provide the company with information en
 
 Moreover, we sought to determine whether factors such as weekends or temperature influenced whether bike users would return to the same station from which they initially rented the bike. The results indicated that these factors do indeed impact return behavior. Once again, this information can serve as an additional metric for estimating demand on specific weekdays.
 
-#Neural network and SVM insights
+We further applied a simple neural net to also estimate trip duration, which proved to be very useful. 
 
+At last we used a Support Vector Machine to determine the city based on latitude and longitude. Because the cities are considerably far apart, the classification worked very well. This allows us to be independent from possibly costly location services/APIs and determine the location of a trip solely based on GPS-data from the device itself.
 
 Overall, our analysis provides valuable insights to the bike rental company, shedding light on the factors affecting ride duration, bike demand, and return behavior. Armed with this knowledge, the company can make informed decisions to optimize operations, enhance customer satisfaction, and maximize profitability.
