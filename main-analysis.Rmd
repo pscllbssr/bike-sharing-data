@@ -527,13 +527,13 @@ The distribution of temperature and dew point is evenly scattered through the gr
 The graph of each variable seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
 
 ```{r gam, cache=TRUE}
-gam <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), data = weather)
-summary(gam)
+gam_model <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), data = weather)
+summary(gam_model)
 
-plot(gam, residuals = TRUE, pages = 1, shade = TRUE)
+plot(gam_model, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r #round(summary(gam)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(gam)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
+The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r round(summary(gam_model)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r round(summary(gam_model)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
 
 # Generalised Additive Model (Emilia) with same variables as linear model 
 
