@@ -2,11 +2,13 @@
 title: "Analysis of norwegian bike sharing data"
 author: "Elise Gourri, Emilia Marlene Ribeiro Peixoto, Pascal Albisser"
 date: "`r Sys.Date()`"
-output: 
+output:
   html_document:
     toc: yes
-    toc_float: TRUE
+    toc_float: yes
     code_folding: hide
+  pdf_document:
+    toc: yes
 editor_options:
   chunk_output_type: console
 ---
@@ -60,7 +62,7 @@ This report focuses on the study of bike sharing systems in three cities in Norw
 The bike sharing systems operate on a docked bike model, with bikes available at official stations and returned to other official stations.  
 The inclusion of weather data allows for a comprehensive understanding of factors influencing bike usage. The study aims to demonstrate the application of machine learning techniques to improve bike-sharing systems' efficiency and planning.
 
-Our dataset is composed of the following variables:
+Our dataset is composed of the main following variables:
 
 | Field Name | Data Type | Description |
 | :--- | :--- | :--- |
@@ -77,98 +79,18 @@ Our dataset is composed of the following variables:
 | temp | DECIMAL | Approximate temperature during the trip |
 | dwpt | DECIMAL | Dew point in °C |
 | prcp | DECIMAL | Total Precipitation in mm |
-| snow | INTEGER | Snow Depth in mm |
-| wpgt | DECIMAL | Wind Peak Gust in km/h |
-| tsun | BOOLEAN | Total sunshine duration in minutes |
-| coco | INTEGER | Weather Condition Code from 1 (clear) to 27 (storm) |
 
-__add the following if used__
-WDIR	Wind (From) Direction
-WSPD	Average Wind Speed
-RHUM	Relative Humidity
-PRES	Sea-Level Air Pressure
-
-More details concerning the labelling of the weather data is available on the [Meteostat website](https://dev.meteostat.net/formats.html#time-format).
-
-Our dataset looks as follows:
+Our initial dataset looks as follows:
 
 ```{r load_data, cache=TRUE}
 data_raw <- fread("data/trips_2022.csv")
-kable(head(data_raw))
+
+head(data_raw) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
 ```
 
 # Data preparation
 
 We needed to modify the dataset to be able to perform our analysis.
-
-## Duration of trips
-
-```{r duration_nb, results=FALSE}
-data <- data_raw
-
-# count the number of trips that lasted 2 minutes or less and starting and ending at the same station
-short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
-short_trips
-
-# count the number of trips that lasted 24 hours and more
-long_trips <- nrow(subset(data, duration >= 86400))
-long_trips
-
-# remove the data concerning the "short" and long "trips"
-data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_id) & !(data$duration >= 86400), ]
-
-# longest trip (under 24 hours)
-max(data$duration)
-```
-
-We removed `r short_trips` trips which lasted 2 min or less and with the same start and end stations. They probably correspond to users picking up a bike and immediately returning it. None of the trips lasted more than 24 hours.
-
-```{r duration_plot, eval=TRUE}
-data %>%
-  ggplot(mapping = aes(x = city, y = duration, colour = city)) +
-    geom_violin() +
-    scale_y_continuous(trans = 'log10') +
-    labs(title = "Distribution of the trips duration", y = "Duration (log-scale)", x = "")
-```
-
-Most of the trips were rather short trips. Some trips lasted several hours, the longest being approximately 19 hours Oslo.
-
-## Price of the trips
-
-We added a column containing the price per trip.
-In the 3 cities Bergen, Oslo and Trondheim, the first 60 min are free, each 15 supplementary minutes cost NOK 15 ^[https://trondheimbysykkel.no/en/how-it-works].
-
-```{r price_trips}
-data$price <- ifelse(data$duration <= 3600, 0, (ceiling((data$duration - 3600) / 900)) * 15)
-```
-
-## Haversine distance
-
-We added the haversine distance for each trip between the start and end stations. Of course, following a straight line on a bike trip in a city is not possible, as many buildings and other obstacles exist. But this calculation at least approximates how far the stations are apart. 
-
-```{r haversine}
-data <- data %>% 
-  mutate(h_distance = distHaversine(
-    cbind(start_station_longitude, start_station_latitude),
-    cbind(end_station_longitude, end_station_latitude))) 
-
-kable(head(data %>% 
-  select(start_station_longitude, start_station_latitude, end_station_longitude, end_station_latitude, h_distance, duration)))
-
-```
-
-We can also plot the distance in relation to duration of the trips.
-
-```{r haversine_plot, warning=FALSE}
-data %>% 
-  sample_n(10000) %>% 
-  ggplot(mapping = aes(x = h_distance, y = duration)) +
-  geom_point(alpha = 1/10) +
-  scale_y_continuous(trans = 'log10') + 
-  scale_x_continuous(trans = 'log10') +
-  labs(x = 'Haversine distance (m, log-scale)', y = 'Duration (s, log-scale)', title = 'Distance vs. time in bike trips')
-```
-
 
 ## Retain only data from April to November
 
@@ -207,8 +129,38 @@ data$weekday <- weekdays(as.Date(data$started_at))
 data$weekend <- ifelse(weekdays(as.Date(data$started_at)) %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
 ```
 
-## Number of stations
+## Duration of trips
+```{r duration_nb, results=FALSE}
+data <- data_raw
 
+# count the number of trips that lasted 2 minutes or less and starting and ending at the same station
+short_trips <- nrow(subset(data, duration <= 120 & start_station_id == end_station_id))
+short_trips
+
+# count the number of trips that lasted 24 hours and more
+long_trips <- nrow(subset(data, duration >= 86400))
+long_trips
+
+# remove the data concerning the "short" and long "trips"
+data <- data[!(data$duration <= 120 & data$start_station_id == data$end_station_id) & !(data$duration >= 86400), ]
+
+# longest trip (under 24 hours)
+max(data$duration)
+```
+
+We removed `r short_trips` trips which lasted 2 min or less and with the same start and end stations. They probably correspond to users picking up a bike and immediately returning it. None of the trips lasted more than 24 hours.
+
+```{r duration_plot, eval=TRUE}
+data %>%
+  ggplot(mapping = aes(x = city, y = duration, colour = city)) +
+    geom_violin() +
+    scale_y_continuous(trans = 'log10') +
+    labs(title = "Distribution of the trips duration", y = "Duration (log-scale)", x = "")
+```
+
+Most of the trips were rather short trips. Some trips lasted several hours, the longest being approximately 19 hours in Oslo.
+
+## Number of stations
 ```{r num_stations, results=FALSE}
 # Count the number of stations in each city
 num_stations_per_city <- data %>%
@@ -259,16 +211,6 @@ To narrow our analysis furthermore, we only considered the data coming from the 
 
 We removed `r removed_top` trips from our dataset, which then contained `r after_top` trips.
 
-
-## Time of rental
-
-We reformated the columns containing the start and end time of the bike rentals.
-
-```{r time_col}
-data <- data %>% mutate(start_time = as.ITime(started_at)) %>%
-  mutate(end_time = as.ITime(ended_at))
-```
-
 ## Missing weather data
 
 Given the large number of observations still available, we decided to not take into account trips with missing temperature values.
@@ -290,8 +232,32 @@ We modified our dataset accordingly.
 data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 ```
 
+## Haversine distance
+
+We added the haversine distance for each trip between the start and end stations. Of course, following a straight line on a bike trip in a city is not possible, as many buildings and other obstacles exist. But this calculation at least approximates how far the stations are apart. 
+
+```{r haversine}
+data <- data %>% 
+  mutate(h_distance = distHaversine(
+    cbind(start_station_longitude, start_station_latitude),
+    cbind(end_station_longitude, end_station_latitude))) 
+
+head(data %>% 
+  select(start_station_longitude, start_station_latitude, end_station_longitude, end_station_latitude, h_distance, duration)) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+## Time of rental
+
+We reformated the columns containing the start and end time of the bike rentals.
+
+```{r time_col}
+data <- data %>% mutate(start_time = as.ITime(started_at)) %>%
+  mutate(end_time = as.ITime(ended_at))
+```
+
 # Data exploration
 
+## Trips per city
 ```{r trips_per_city_histo}
 data %>% 
   ggplot(mapping = aes(x = city, fill = city)) + 
@@ -334,11 +300,9 @@ month_counts <- table(data$month)
 # Find the month with the highest number of observations
 max_month <- names(month_counts)[which.max(month_counts)]
 ```
-
 The month with the most trips in our dataset was August.
 
 ## Time of the trips
-
 ```{r time_trips_plot, message=FALSE}
 # Create a new variable for the hour of the day
 data$Hour <- hour(data$started_at)
@@ -369,28 +333,38 @@ hour1 <- top_hours[1]
 hour2 <- top_hours[2]
 hour3 <- top_hours[3]
 ```
-
 There are no missing values concerning the start or the end time of the trips.  
 Our dataset contains bike trips throughout the day for almost every city. 
 We could identify 2 peak times of usage: in the morning at `r hour2`am and in the afternoon between `r hour1`pm and `r hour3`pm.
 
-## Number of trips per price
-
-```{r price}
-ggplot(data, aes(x = price, fill = city)) +
-  geom_bar() +
-  labs(x = "Price (NOK)", y = "Number of Trips", title = "Number of Trips by Price") +
-  scale_fill_discrete(name = "City") +
-  theme_minimal()
-
+## Price of the trips
+```{r price_trips}
+data$price <- ifelse(data$duration <= 3600, 0, (ceiling((data$duration - 3600) / 900)) * 15)
 free_trips <- round(sum(data$duration <= 3600) / nrow(data) * 100,0)
 ```
 
+We added a column containing the price per trip.
+In the 3 cities Bergen, Oslo and Trondheim, the first 60 min are free, each 15 supplementary minutes cost NOK 15 ^[https://trondheimbysykkel.no/en/how-it-works].   
 Most of the trips last under 60 min (`r free_trips`%) and are free (included in the basis subscription).
+
+## Distance of the trips
+
+We can also plot the distance in relation to duration of the trips.
+
+```{r haversine_plot, warning=FALSE}
+data %>% 
+  sample_n(10000) %>% 
+  ggplot(mapping = aes(x = h_distance, y = duration, color = city)) +
+  geom_point(alpha = 1/2) +
+  scale_y_continuous(trans = 'log10') + 
+  scale_x_continuous(trans = 'log10') +
+  labs(x = 'Haversine distance (m, log-scale)', y = 'Duration (s, log-scale)', title = 'Distance vs. time in bike trips')
+```
+
 
 ## Weather
 
-Evolution of the temperature and precipitations in Bergen, Oslo and Trondheim between April 2022 and November 2022.
+We looked at the evolution of the temperature and precipitations in Bergen, Oslo and Trondheim between April 2022 and November 2022.
 
 ### Temperature
 
@@ -423,15 +397,15 @@ mean_temp_Oslo <- round(mean(daily_temp$mean_temp[daily_temp$city == "Oslo"]),1)
 mean_temp_Trondheim <- round(mean(daily_temp$mean_temp[daily_temp$city == "Trondheim"]),1)
 ```
 
-The maximum temperature was reached in `r city_max_temp` with `r max_temp` on `r day_max_temp`.
-The mean temperature is for each city is displayed in the following graph as a vertical line.
+The maximum temperature was reached in `r city_max_temp` with `r max_temp`°C on `r day_max_temp`.
+The mean temperature for each city is displayed in the following graph as a vertical line.
 
 ```{r temperature_trips}
 
 line_dummy <- data.frame(city = c("Bergen", "Oslo", "Trondheim"), Z = c(mean_temp_Bergen, mean_temp_Oslo, mean_temp_Trondheim))
 
 ggplot(data, aes(x = temp, fill = city)) +
-  geom_histogram(binwidth = 1, color = "black", position = "identity") +
+  geom_histogram(binwidth = 1, color = "black", position = "identity", alpha = 1/2) +
   labs(x = "Temperature (°C)", y = "Number of Observations", title = "Number of Observations per Temperature") +
   facet_wrap(~ city) +
   geom_vline(data = line_dummy, aes(xintercept = Z), linetype = "dashed", linewidth = 1) +
@@ -439,10 +413,9 @@ ggplot(data, aes(x = temp, fill = city)) +
   
 ```
 
-Most of the bike trips occured when the temperature was above 10°C.
+Most of the bike trips occurred when the temperature was above 10°C.
 
 ### Precipitations
-
 ```{r precipitations, message=FALSE}
 # Calculate the mean precipitation per hour and city
 hourly_prcp <- data %>%
@@ -461,28 +434,25 @@ ggplot(daily_prcp, aes(x = date, y = sum_prcp, color = city)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
 
-```{r precipitations_trips, message=FALSE, eval=FALSE}
- 
-ggplot(data, aes(x = prcp, fill = city)) +
-  geom_histogram(binwidth = 1, color = "black", position = "identity") +
-  labs(x = "Precipitations (mm)", y = "Number of Observations", title = "Number of Observations per Amount of precipitations")
-```
+Rain was common in the three cities between April and October 2022.
 
+# Modeling of the trip duration
 
-# Linear Model: trip duration (Elise)
+Our first analysis focused on the influence of different variables on the trip duration.
 
-We first used a linear model using weather data (temperature and precipitation) as well as the day (weekday or weekend) to predict the duration of the trips.
+## Linear Model (Elise)
 
+We first used a linear model using weather data (temperature, precipitation and dew point) as well as the day (weekday or weekend) to predict the duration of the trips.
 ```{r model_lm}
 # Fit a linear regression model with duration as the response variable and weekend, distance, temperature and precipitations as predictor variables
-model_lm <- lm(duration ~ h_distance + temp + prcp + poly(temp, degree=2) + poly(prcp, degree=2) + weekend, data = data)
+model_lm <- lm(duration ~ h_distance + temp + prcp + dwpt + poly(temp, degree=2) + poly(prcp, degree=2) + poly(dwpt, degree=2)+ weekend, data = data)
 
 # Summarize the results of the model
-summary(model_lm)
+summary(model_lm) 
 ```
 
 All chosen predictor variables have a significant impact on the duration of the trips.
-However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm$residuals^2)), 2)`.
+However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm$residuals^2)),2)`.
 
 ```{r model_lm_predictions}
 # Create a data frame with the observed and predicted values
@@ -496,83 +466,184 @@ ggplot(pred_df, aes(x = predicted, y = duration)) +
    labs(x = "Predicted Duration", y = "Observed Duration")
 ```
 
-# Generalised Additive Model
+## Generalised Additive Model (Emilia)
 
-Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study weather the  weather conditions affect the duration of trips.
+Another approach to predict the duration of the trips using the same variable as before was to use a Generalise Additive Model (GAM).
 
+```{r gam_param_lm, message=FALSE}
+#retrieve only chosen parameters and rename the columns
+gam_data <- data %>% select(c(duration, temp, prcp, dwpt, h_distance, weekend))
+colnames(gam_data) <- c("Duration", "Temperature", "Precipitation", "Dew_Point", "Distance", "Weekend")
 
-```{r gam_dataset, message=FALSE, cache=TRUE}
-
-#retrieve only data about the duration and weather parameters 
-weather <- data %>% select(c(city, duration, temp, dwpt, prcp, snow, wpgt))
-colnames(weather) <- c("city","Duration", "Temperature","Dew_Point", "Precipitation", "Snow_Depth", "Wind_Peak_Gust")
-
-#remove NA values and chose relevant weather parameters
-weather<- na.omit(weather[, c("city","Duration","Temperature", "Dew_Point", "Precipitation")])
-
-head(weather)
-
-#display relationship of duration with the weather variables
-template.graph.weather <- ggplot(data = weather,
+#display relationship of duration with the different variables
+template.graph.weather <- ggplot(data = gam_data,
                                  mapping = aes(y = log(Duration))) +
   geom_point(alpha = 1/10) +
   geom_smooth()
 
 template.graph.weather + aes(x = Temperature)
-template.graph.weather + aes(x = Dew_Point)
 template.graph.weather + aes(x = Precipitation)
+template.graph.weather + aes(x = Dew_Point)
+template.graph.weather + aes(x = Distance)
 ```
 
 The distribution of temperature and dew point is evenly scattered through the graph. Whereas, the precipitation values are mainly available on the left side of the graph area.
-The graph of each variable seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
+The graph of these variables seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
+The relationship between the distance and the duration of the trip is not everywhere linear.
 
-```{r gam}
-gam_model <- gam(log(Duration) ~ s(Temperature) + s(Dew_Point) + s(Precipitation), data = weather)
-summary(gam_model)
+```{r gam_lm}
+# Fit the gam model
+model_gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Dew_Point) + s(Distance) + Weekend,
+              data = gam_data)
 
-plot(gam_model, residuals = TRUE, pages = 1, shade = TRUE)
-```
-
-The GAM model states that temperature, dew_point and precipitation have a significant effect on the duration of a bike trip. The smooth term temperature has the largest edf value `r #round(summary(gam_model)$s.table["s(Temperature)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(gam_model)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
-
-# Generalised Additive Model (Emilia) with same variables as linear model 
-
-Another approach to predict the duration of the trips was to use a Generalise Additive Model (GAM), to study how the  weather conditions affect the duration of trips.
-
-```{r gam_dataset2, message=FALSE}
-
-#retrieve only data about the duration and weather parameters 
-weather <- data %>% select(c(duration, temp, prcp, h_distance, weekend))
-colnames(weather) <- c("Duration", "Temperature", "Precipitation", "Distance", "Weekend")
-
-#remove NA values and chose relevant weather parameters
-weather<- na.omit(weather[, c("Duration", "Temperature", "Precipitation", "Distance", "Weekend")])
-
-#display relationship of duration with the weather variables
-template.graph.weather <- ggplot(data = weather,
-                                 mapping = aes(y = log(Duration))) +
-  geom_point(alpha = 1/10) +
-  geom_smooth()
-
-template.graph.weather + aes(x = Temperature)
-template.graph.weather + aes(x = Precipitation)
-template.graph.weather + aes(x = Distance)
-template.graph.weather + aes(x = Weekend)
-```
-
-```{r gam2, cache=TRUE}
-model_gam <- gam(log(Duration) ~ s(Temperature) + s(Precipitation) + s(Distance) + Weekend,
-              data = weather)
+# Summarize the results of the model
 summary(model_gam)
-
-plot(model_gam, residuals = TRUE, pages = 1, shade = TRUE)
 ```
 
-The GAM model states that the temperature, the precipitations, the distance and the distinction weekday/weekend have a significant effect on the duration of a bike trip. We made the same observations with the linear model used above. However, the GAM performs better:the R^2 is of `r #round(summary(gam)$r.squared,2)`.
+The summary output of the GAM model indicates that there is a strong evidence that the temperature, the precipitations, the dew point, and the distance have a strong non-linear effect on the duration of the trips. The distinction weekday/weekend also influences the duration of a bike trip.
+The smooth term for the distance has the largest edf value `r #round(summary(model_gam)$s.table["s(Distance)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(model_gam)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
 
-# Generalised Linear Model with family set to Poisson (Pascal)
+We made similar observations with the linear model used above. However, the GAM performs better: the R^2 is of `r #round(summary(model_gam)$r.squared,2)`.
 
-We wanted to predict the number of available bikes needed at a given station depending on the temperature. As this is count data we used a Generalised Linear Model with the family Poisson to achieve this.  
+## Estimating the trip duration with a Neural Network (Pascal)
+
+We also want to see if we can get a better estimation of the trip duration with a neural net. In order to do this, we first scaled our dataset and splitted in a test- and train-part.
+
+```{r prepare_neuronal_net_data}
+# fix random generator
+set.seed(6987)
+
+# remove obvious round trips
+data_trips <- data %>% 
+  filter(start_station_id != end_station_id) 
+
+# select the predictors
+predictors <- c("h_distance", "temp", "prcp")
+
+# selec columns, drop NA and take random subsample of 100k trips
+data_trips <- data_trips %>% 
+  select(c("duration", all_of(predictors))) %>%
+  drop_na() %>% 
+  sample_n(10000) 
+
+# scale
+max <- apply(data_trips, 2, max)
+min <- apply(data_trips, 2, min)
+data_trips_scaled <- as.data.frame(scale(data_trips, center = min, scale = max - min))
+
+# split train/test
+trainIndex <- createDataPartition(
+  y = data_trips_scaled$duration, 
+  p = .8,
+  list = FALSE,
+)
+train_trips <- data_trips_scaled[trainIndex,]
+test_trips <- data_trips_scaled[-trainIndex,]
+```
+
+As a baseline model, we took a very simple net consisting of one predictor (the haversine distance) and one hidden layer containing a single neuron.
+
+```{r nn_baseline}
+# train the neural network
+trips_net <- neuralnet(duration ~ h_distance, data = train_trips, linear.output = TRUE)
+
+# predict results on test-set
+prediction <- compute(trips_net, test_trips)
+
+plot(trips_net, rep = "best")
+```
+
+The baseline already performed quite well, considering the obvious outliers of sightseeing trips:
+
+```{r nn_baseline_evaluation}
+# scale back
+prediction_rescaled <- prediction$net.result * (max['duration'] - min['duration']) + min['duration']
+duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
+
+# calculate RMSE
+rmse <- sqrt(mean((test_trips$duration - prediction$net.result)^2))
+rmse_rescaled <- sqrt(mean((duration_rescaled - prediction_rescaled)^2))
+
+# plot prediction vs real
+plot(duration_rescaled, prediction_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of Baseline model', log="xy")
+
+# plot perfect prediction
+abline(0,1)
+
+# add RMSE to plot
+mtext(paste("RMSE: ", round(rmse, digits = 3), " (", round(rmse_rescaled, 3), ")"), side = 3)
+```
+
+The RMSE calculated with the data scaled back lies at `r round(rmse_rescaled, 3)`. This was already better than the linear model above, although we have to consider that the training data consisted only of a subset and we filtered out round trips in this case.
+
+We wanted to see if we could achieve better results with different parameters. We added all available predictors and used the caret-package to try out different options of the neuronal net.
+
+```{r nn_tuning, cache=TRUE}
+
+tune_grid <- expand.grid(.layer1=c(1:2), .layer2=c(0:2), .layer3=c(0))
+train_control <- trainControl(
+  method = 'repeatedcv',
+  number = 5,
+  repeats = 5,
+  returnResamp = 'final'
+)
+
+models <- train(duration ~ .,
+                data = train_trips,
+                method = 'neuralnet',
+                metric = 'RMSE',
+                linear.output = TRUE,
+                tuneGrid = tune_grid,
+                trControl = train_control
+)
+
+# extract the best model (concerning RMSE)
+trips_net_tuned <- models$finalModel
+
+# predict results on test-set
+prediction_tuned <- compute(trips_net_tuned, test_trips)
+
+# plot the winner
+plot(trips_net_tuned, rep = "best")
+```
+
+The predictions of the tuned model looked similar to the predictions of the baseline model at first sight.
+
+```{r nn_tuned_evaluation}
+# scale back
+prediction_tuned_rescaled <- prediction_tuned$net.result * (max['duration'] - min['duration']) + min['duration']
+duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
+
+# calculate RMSE
+rmse_tuned <- sqrt(mean((test_trips$duration - prediction_tuned$net.result)^2))
+rmse_tuned_rescaled <- sqrt(mean((duration_rescaled - prediction_tuned_rescaled)^2))
+
+# plot prediction vs real
+plot(duration_rescaled, prediction_tuned_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of tuned model', log="xy")
+
+# plot perfect prediction
+abline(0,1)
+
+# add RMSE to plot
+mtext(paste("RMSE: ", round(rmse_tuned, digits = 3), " (", round(rmse_tuned_rescaled, 3), ")"), side = 3)
+```
+
+By adding more predictors, layers and neurons the RMSE decreased only a little bit, from `r round(rmse_rescaled, 3)` to `r round(rmse_tuned_rescaled, 3)`. This shows that the haversine distance still is the main predictor for the duration of a trip. Therefore, we can use the simple baseline model.
+
+```{r nn_regression_example}
+
+# predict 100m
+predict_reg <- compute(trips_net, as.data.frame(scale(data.frame(h_distance = c(0, 1000)), center = min['h_distance'], scale = max['h_distance'] - min['h_distance'])))
+
+predict_reg <- predict_reg$net.result * (max['duration'] - min['duration']) + min['duration']
+
+```
+
+According to the model, a biker needs roughly `r round(predict_reg[2,1])` seconds or ~`r round(predict_reg[2,1] / 60)` minutes for 1km airline distance, including the time needed for setting up and parking the bike at the end which the model estimates to be be at `r round(predict_reg[1,1])` seconds or ~`r round(predict_reg[1,1] / 60)` minutes.
+
+# Modeling the number of outgoing trips with a Generalised Linear Model with family set to Poisson (Pascal)
+
+We wanted to predict the number of available bikes needed at a given station depending on the temperature. As this is count data, we used a Generalised Linear Model with the family Poisson to achieve this.  
 
 Some further data preparation was needed. We calculated the number of outgoing trips at each station and kept the 6 stations with the most trips. As there was as significant drop in July we also took into account the summer vacations between June 18th and August 21th.
 
@@ -585,7 +656,7 @@ trips_by_station <- data_raw %>%
   arrange(desc(num_trips)) 
 
 # show stations with most trips
-kable(head(trips_by_station, 6))
+head(trips_by_station, 6) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
 ```
 
 ```{r outgoing_trips, message=FALSE}
@@ -626,8 +697,7 @@ trips_per_station %>%
        x = "Avg. temperature C°")
 ```
 
-When we model this over all six stations
-
+We ran the model over the six stations.
 ```{r glm_poisson_temp}
 trips_per_temp_glm <- glm(trips ~ avg_temp,
                      family = "poisson",
@@ -641,8 +711,7 @@ glm_temp_coef <- exp(coef(trips_per_temp_glm)['avg_temp'])
 
 As seen in the model output above, the temperature has a significant influence on the trips per day. For every increase of 1°C, we get a `r round(glm_temp_coef,2)` times increase in the number of trips a day.
 
-
-# Generalised Linear Model with family set to Binomial __OPEN__
+# Analyzing the round trips with a Generalised Linear Model with family set to Binomial
 
 ```{r round_trip}
 #new BOOLEAN variable: round_trip
@@ -661,7 +730,7 @@ data %>%
     geom_bar()
 ```
 
-We use a generalized linear model with family set to binomial to analyze how the different cities, the distinction between weekday or weekend and the temperature influence the likellihood of a trip to be a roundtrip.
+We use a generalized linear model with family set to binomial to analyze how the different cities, the distinction between weekday or weekend and the temperature influence the likelihood of a trip to be a roundtrip.
 ```{r binomial_round}
 glm_binomial <- glm(round_trip ~ city - 1 + weekend + temp,
                      family = "binomial",
@@ -670,170 +739,26 @@ glm_binomial <- glm(round_trip ~ city - 1 + weekend + temp,
 summary(glm_binomial)
 ```
 
-__INTERPRETATION__
-
-
-```{r}
+```{r binom_weekend}
 #extraction of the coefficient "weekend" for interpretation of the model
-
-coef(glm_binomial)[c("weekendWeekend", "temp")]
-
-exp(coef(glm_binomial)["weekendWeekend"])
+exp_coef_weekend <- exp(coef(glm_binomial)["weekendWeekend"])
 ```
 
-All variables present to have significant coefficients, consequently, they all  highly impact the probability of a trip being a round trip. However, if we interpret individual coefficients such as the weekend/weekday, we can determine that the odds of a round trip on a weekend is 1.94 higher than on weekday.
+All variables present to have significant coefficients, consequently, they all highly impact the probability of a trip being a round trip. However, if we interpret individual coefficients such as the weekend/weekday, we can determine that the odds of a round trip on a weekend is `exp(Estimate(weekendWeekend)=` 1.94 higher than on weekday.
 
-```{r}
+```{r binom_temp}
 #extraction of the coefficient temperature
-
 exp.coef.temp <- exp(coef(glm_binomial)["temp"])
-print(exp.coef.temp, digits = 3)
-
+#print(exp.coef.temp, digits = 3)
 
 exp.coef.temp.10 <- exp(coef(glm_binomial)["temp"] * 10)
-print(exp.coef.temp.10, digits = 3)
+#print(exp.coef.temp.10, digits = 3)
 ```
 
-When increasing the temperature by 1°C, the odds of a round trip increase by 4%.
-To check the effect of the change of temperature, we wanted to test what would happen if we increase the temperature by 10°C. As we can see, the odds of a round trip increase to 55%.
+When increasing the temperature by 1°C, the odds of a round trip increase by `exp(Estimate(temp)=` 4%.
+To check the effect of the change of temperature, we wanted to test what would happen if we increase the temperature by 10°C. As we can see, the odds of a round trip increase to `exp(Estimate(weekendWeekend)*10=` 55%.
 
-# Neural Network (Pascal)
-
-We also want to see if we can get a better estimation of the trip duration with a neural net. In order to do this we first scale our dataset and split in a test- and train-part.
-
-```{r prepare_neuronal_net_data}
-# fix random generator
-set.seed(6987)
-
-# remove obvious round trips
-data_trips <- data %>% 
-  filter(start_station_id != end_station_id) 
-
-# select the predictors
-predictors <- c("h_distance", "temp", "prcp")
-
-# selec columns, drop NA and take random subsample of 100k trips
-data_trips <- data_trips %>% 
-  select(c("duration", all_of(predictors))) %>%
-  drop_na() %>% 
-  sample_n(10000) 
-
-# scale
-max <- apply(data_trips, 2, max)
-min <- apply(data_trips, 2, min)
-data_trips_scaled <- as.data.frame(scale(data_trips, center = min, scale = max - min))
-
-# split train/test
-trainIndex <- createDataPartition(
-  y = data_trips_scaled$duration, 
-  p = .8,
-  list = FALSE,
-)
-train_trips <- data_trips_scaled[trainIndex,]
-test_trips <- data_trips_scaled[-trainIndex,]
-```
-
-As a baseline model we take a very simple net consisting of one predictor (the haversine distance) and one hidden layer containing a single neuron.
-
-```{r nn_baseline}
-# train the neural network
-trips_net <- neuralnet(duration ~ h_distance, data = train_trips, linear.output = TRUE)
-
-# predict results on test-set
-prediction <- compute(trips_net, test_trips)
-
-plot(trips_net, rep = "best")
-```
-
-The baseline already performs quite well, considering the obvious outliers of sightseeing trips:
-
-```{r nn_baseline_evaluation}
-# scale back
-prediction_rescaled <- prediction$net.result * (max['duration'] - min['duration']) + min['duration']
-duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
-
-# calculate RMSE
-rmse <- sqrt(mean((test_trips$duration - prediction$net.result)^2))
-rmse_rescaled <- sqrt(mean((duration_rescaled - prediction_rescaled)^2))
-
-# plot prediction vs real
-plot(duration_rescaled, prediction_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of Baseline model', log="xy")
-
-# plot perfect prediction
-abline(0,1)
-
-# add RMSE to plot
-mtext(paste("RMSE: ", round(rmse, digits = 3), " (", round(rmse_rescaled, 3), ")"), side = 3)
-```
-
-The RMSE calculated with the data scaled back lies at `r round(rmse_rescaled, 3)`. This is already better than the linear model above, although we have to consider that the training data consists only of a subset and has filtered out round trips in this case.
-
-Now we want to see if we can achieve better results with different parameters. For this we add all available predictors and use the caret-package to try out different options of the neuronal net.
-
-```{r nn_tuning, cache=TRUE}
-
-tune_grid <- expand.grid(.layer1=c(1:2), .layer2=c(0:2), .layer3=c(0))
-train_control <- trainControl(
-  method = 'repeatedcv',
-  number = 5,
-  repeats = 5,
-  returnResamp = 'final'
-)
-
-models <- train(duration ~ .,
-                data = train_trips,
-                method = 'neuralnet',
-                metric = 'RMSE',
-                linear.output = TRUE,
-                tuneGrid = tune_grid,
-                trControl = train_control
-)
-
-# extract the best model (concerning RMSE)
-trips_net_tuned <- models$finalModel
-
-# predict results on test-set
-prediction_tuned <- compute(trips_net_tuned, test_trips)
-
-# plot the winner
-plot(trips_net_tuned, rep = "best")
-```
-
-The predictions of the tuned model look similar to the predictions of the baseline model at first sight.
-
-```{r nn_tuned_evaluation}
-# scale back
-prediction_tuned_rescaled <- prediction_tuned$net.result * (max['duration'] - min['duration']) + min['duration']
-duration_rescaled <- test_trips$duration * (max['duration'] - min['duration']) + min['duration']
-
-# calculate RMSE
-rmse_tuned <- sqrt(mean((test_trips$duration - prediction_tuned$net.result)^2))
-rmse_tuned_rescaled <- sqrt(mean((duration_rescaled - prediction_tuned_rescaled)^2))
-
-# plot prediction vs real
-plot(duration_rescaled, prediction_tuned_rescaled, col='blue', pch=16, ylab = "predicted duration", xlab = "real duration", main = 'Predictions of tuned model', log="xy")
-
-# plot perfect prediction
-abline(0,1)
-
-# add RMSE to plot
-mtext(paste("RMSE: ", round(rmse_tuned, digits = 3), " (", round(rmse_tuned_rescaled, 3), ")"), side = 3)
-```
-
-By adding more predictors, layers and neurons the RMSE decreased only a little bit, from `r round(rmse_rescaled, 3)` to `r round(rmse_tuned_rescaled, 3)`. This shows that the haversine distance still is the main predictor for the duration of a trip. And means we might as well use the simple baseline model.
-
-```{r nn_regression_example}
-
-# predict 100m
-predict_reg <- compute(trips_net, as.data.frame(scale(data.frame(h_distance = c(0, 1000)), center = min['h_distance'], scale = max['h_distance'] - min['h_distance'])))
-
-predict_reg <- predict_reg$net.result * (max['duration'] - min['duration']) + min['duration']
-
-```
-
-According to the model a biker needs roughly `r round(predict_reg[2,1])` seconds or ~`r round(predict_reg[2,1] / 60)` minutes for 1km airline distance, including the time needed for setting up and parking the bike at the end which the model estimates to be be at `r round(predict_reg[1,1])` seconds or ~`r round(predict_reg[1,1] / 60)` minutes.
-
-# Support Vector Machine
+# Identifying cities with a Support Vector Machine
 
 We tested if a Support Vector Machine could help predict the city based on the latitude and longitude of the stations.
 This could for example be useful to adopt a nation-wide bike-sharing system without relying on station ID to identify the city of the station.
@@ -851,7 +776,6 @@ rm(cities_start, cities_end)
 
 cities$city <- as.factor(cities$city)
 
-print(colSums(is.na(cities))) # no missing values!
 
 set.seed(10)
 cities_subset <- rbind(
@@ -861,7 +785,7 @@ cities_subset <- rbind(
 )
 cities_subset %>% 
   group_by(city) %>% 
-  summarise('number' = n())
+  summarise('number' = n()) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
 ```
 
 ```{r svm_plot}
@@ -870,7 +794,6 @@ cities_subset %>%
     geom_point() +
     labs(title = "Start/End points per city")
 ```
-
 
 ```{r cities_dataset_split, warning=FALSE}
 # form training and testing datasets
@@ -887,7 +810,7 @@ cities_svm <- svm(city ~. , train_cities, kernel = "linear", scale = TRUE, cost 
 
 #make predictions
 test_pred <- predict(cities_svm, test_cities)
-table(test_pred)
+table(test_pred) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
 ```
 
 ```{r plot_linear_svm, cache=TRUE}
@@ -904,18 +827,14 @@ No data points was misclassified. We built a SVM with a prediction accuracy of 1
 
 # Conclusion
 
-Our analysis focused on data obtained from the cities of Bergen, Oslo, and Trondheim in Norway. The initial phase of the project involved data preparation to facilitate its utilization in the subsequent models we employed.
+Our analysis focused on data obtained from the cities of Bergen, Oslo, and Trondheim in Norway. The project's initial phase involved data preparation to facilitate its utilization in the subsequent models we employed.
 
-To begin with, we employed a linear model to examine the potential impact of variables such as the weekend, temperature, distance, and precipitation on the duration of bike rides. However, due to the model's inadequate fit, we decided to employ a GAM using the same variables. The results from the GAM model substantiated our initial suspicions derived from the linear model. As the R-squared value increased in the GAM model, the reliability of the results improved. We hope these findings can provide the bike rental company with a comprehensive understanding of the factors that influence their business, aiding them in their strategical decisions. Considering that revenue is generated only after 60 minutes of bike riding, identifying the factors that potentially affect profitability becomes highly relevant for the company.
+To begin with, we employed a linear model to examine the potential impact of variables such as the weekend, temperature, distance, and precipitation on the duration of bike rides. However, due to the model's inadequate fit, we employed a GAM using the same variables. The results from the GAM model substantiated our initial suspicions derived from the linear model. As the R-squared value increased in the GAM model, the reliability of the results improved. We further applied a simple neural net to estimate trip duration, which proved very useful. We hope these findings can give the bike rental company a comprehensive understanding of the factors influencing their business, aiding them in their strategic decisions. Since revenue is generated only after 60 minutes of bike riding, identifying the factors potentially affecting profitability becomes highly relevant for the company.
 
-Given the inherent association between weather conditions and bike riding, we conducted a further investigation in this regard. Consequently, we employed a GAM model specifically targeting the most promising weather variables. Once again, the results affirmed that these factors indeed affect the duration of bike rides. Such insights can assist the company in determining the types of bikes required for shorter or longer trips based on wearther conditions forecast.
-
-Furthermore, it was imperative for us to provide the company with information enabling them to ascertain the demand for bikes. For this purpose, we employed a GLM with family set to Poisson. The results indicated a positive correlation between temperature and bike demand, implying that higher temperatures lead to higher usage of bikes. This information proves useful in avoiding shortages and accurately predicting the required number of parking slots at bike stations, thereby potentially maximizing profit and reducing costs.
+Furthermore, we wanted to provide the company with information enabling them to ascertain the demand for bikes. For this purpose, we employed a GLM with family set to Poisson. The results indicated a positive correlation between temperature and bike demand, implying that higher temperatures lead to higher usage of bikes. This information helps avoid shortages and accurately predict the required number of parking slots at bike stations, thereby maximizing profit and reducing costs.
 
 Moreover, we sought to determine whether factors such as weekends or temperature influenced whether bike users would return to the same station from which they initially rented the bike. The results indicated that these factors do indeed impact return behavior. Once again, this information can serve as an additional metric for estimating demand on specific weekdays.
 
-We further applied a simple neural net to also estimate trip duration, which proved to be very useful. 
+At last, we used a Support Vector Machine to determine the city based on latitude and longitude. Because the cities are considerably far apart, the classification worked very well. Such a model allows us to be independent of possibly costly location services/APIs and determine the location of a trip solely based on GPS data from the device itself.
 
-At last we used a Support Vector Machine to determine the city based on latitude and longitude. Because the cities are considerably far apart, the classification worked very well. This allows us to be independent from possibly costly location services/APIs and determine the location of a trip solely based on GPS-data from the device itself.
-
-Overall, our analysis provides valuable insights to the bike rental company, shedding light on the factors affecting ride duration, bike demand, and return behavior. Armed with this knowledge, the company can make informed decisions to optimize operations, enhance customer satisfaction, and maximize profitability.
+Overall, our analysis provides valuable insights for the bike rental company, shedding light on the factors affecting ride duration, bike demand, and return behavior. With this knowledge, the company can make informed decisions to optimize operations, enhance customer satisfaction, and maximize profitability.
