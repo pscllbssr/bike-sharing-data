@@ -85,6 +85,9 @@ Our initial dataset looks as follows:
 ```{r load_data, cache=TRUE}
 data_raw <- fread("data/trips_2022.csv")
 
+data_raw <- data_raw %>% mutate(start_time = as.ITime(started_at)) %>%
+  mutate(end_time = as.ITime(ended_at))
+
 head(data_raw) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
 ```
 
@@ -234,7 +237,7 @@ data$prcp <- ifelse(is.na(data$prcp), 0, data$prcp)
 
 ## Haversine distance
 
-We added the haversine distance for each trip between the start and end stations. Of course, following a straight line on a bike trip in a city is not possible, as many buildings and other obstacles exist. But this calculation at least approximates how far the stations are apart. 
+We added the haversine distance for each trip between the start and end stations. Of course, following a straight line on a bike trip in a city is impossible, as many buildings and other obstacles exist. However, this calculation, at least, approximates how far the stations are apart. 
 
 ```{r haversine}
 data <- data %>% 
@@ -244,15 +247,6 @@ data <- data %>%
 
 head(data %>% 
   select(start_station_longitude, start_station_latitude, end_station_longitude, end_station_latitude, h_distance, duration)) %>% kbl() %>%  kable_classic(full_width = F, html_font = "Cambria")
-```
-
-## Time of rental
-
-We reformated the columns containing the start and end time of the bike rentals.
-
-```{r time_col}
-data <- data %>% mutate(start_time = as.ITime(started_at)) %>%
-  mutate(end_time = as.ITime(ended_at))
 ```
 
 # Data exploration
@@ -438,7 +432,8 @@ Rain was common in the three cities between April and October 2022.
 
 # Modeling of the trip duration
 
-Our first analysis focused on the influence of different variables on the trip duration.
+Understanding the parameters influencing the bike trip duration can be valuable for the bike sharing company in planning and optimizing their services for their users.
+The haversine distance between start and end station was expected to be the main parameter influencing the duration of a trip but we discovered that other parameters also had an influence on the trip duration.
 
 ## Linear Model (Elise)
 
@@ -451,7 +446,7 @@ model_lm2 <- lm(log(duration) ~ h_distance + temp + prcp + dwpt + poly(temp, deg
 summary(model_lm2) 
 ```
 
-All chosen predictor variables have a significant impact on the duration of the trips. The R^2 is of `r w round(summary(model_lm2)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm2$residuals^2)),2)`.
+All chosen predictor variables have a significant impact on the duration of the trips. The R^2 is of `r round(summary(model_lm2)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm2$residuals^2)),2)`.   
 The following plot represents the observed values for the duration of the trips versus values predicted by our linear model. The blue line corresponds to the identity between observed and predicted values.
 
 ```{r model_lm2_predictions}
@@ -461,14 +456,15 @@ pred_df <- data.frame(duration = log(data$duration),
 
 # Create a scatter plot of observed vs. predicted values
 ggplot(pred_df, aes(x = predicted, y = duration)) +
-   geom_point() +
+   geom_point(alpha = 1/10) +
    geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
    labs(x = "Predicted Duration (log)", y = "Observed Duration (log)")
 ```
 
 ## Generalised Additive Model (Emilia)
 
-Another approach to predict the duration of the trips using the same variable as before was to use a Generalise Additive Model (GAM).
+Another approach to predict the duration of the trips using the same variables as before was to use a Generalised Additive Model (GAM).
+We first plotted the duration against the different predictors and added a smooth line.
 
 ```{r gam_param_lm, message=FALSE}
 #retrieve only chosen parameters and rename the columns
@@ -481,14 +477,16 @@ template.graph.weather <- ggplot(data = gam_data,
   geom_point(alpha = 1/10) +
   geom_smooth()
 
-template.graph.weather + aes(x = Temperature)
-template.graph.weather + aes(x = Precipitation)
-template.graph.weather + aes(x = Dew_Point)
-template.graph.weather + aes(x = Distance)
+plot1 <- template.graph.weather + aes(x = Temperature)
+plot2 <- template.graph.weather + aes(x = Precipitation)
+plot3 <- template.graph.weather + aes(x = Dew_Point)
+plot4 <- template.graph.weather + aes(x = Distance)
+
+grid.arrange(plot1, plot2, plot3, plot4, ncol = 2)
 ```
 
-The distribution of temperature and dew point is evenly scattered through the graph. Whereas, the precipitation values are mainly available on the left side of the graph area.
-The graph of these variables seem to have a linear relationship that remains flat throughout the graph, therefore, an effect is difficult to spot here.
+The distribution of the data for the variables temperature and dew point is evenly scattered through the graph. Whereas, the precipitation values are mainly available on the left side of the graph area.
+These variables seem to have a somewhat linear relationship with the duration of the trips that remains flat throughout the graph, therefore, an effect is difficult to spot here.
 The relationship between the distance and the duration of the trip is not everywhere linear.
 
 ```{r gam_lm}
@@ -507,7 +505,7 @@ We made similar observations with the more simplistic linear model used above. T
 
 ## Estimating the trip duration with a Neural Network (Pascal)
 
-We also wanted to see if we could get a better estimation of the trip duration with a neural network. In order to do this, we first scaled our dataset and then splitted in a test- and train-part. Round trips have been excluded from this analysis.
+We also wanted to see if we could get a better estimation of the trip duration with a neural network. In order to do this, we first scaled our dataset and then splitted it in a test- and train-part. Round trips have been excluded from this analysis.
 
 ```{r prepare_neuronal_net_data}
 # fix random generator
