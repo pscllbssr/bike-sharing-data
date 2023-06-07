@@ -443,27 +443,27 @@ Our first analysis focused on the influence of different variables on the trip d
 ## Linear Model (Elise)
 
 We first used a linear model using weather data (temperature, precipitation and dew point) as well as the day (weekday or weekend) to predict the duration of the trips.
-```{r model_lm}
+```{r model_lm2}
 # Fit a linear regression model with duration as the response variable and weekend, distance, temperature and precipitations as predictor variables
-model_lm <- lm(duration ~ h_distance + temp + prcp + dwpt + poly(temp, degree=2) + poly(prcp, degree=2) + poly(dwpt, degree=2)+ weekend, data = data)
+model_lm2 <- lm(log(duration) ~ h_distance + temp + prcp + dwpt + poly(temp, degree=2) + poly(prcp, degree=2) + poly(dwpt, degree=2)+ weekend, data = data)
 
 # Summarize the results of the model
-summary(model_lm) 
+summary(model_lm2) 
 ```
 
-All chosen predictor variables have a significant impact on the duration of the trips.
-However, this model does not fit our data very well. The R^2 is of `r round(summary(model_lm)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm$residuals^2)),2)`.
+All chosen predictor variables have a significant impact on the duration of the trips. The R^2 is of `r w round(summary(model_lm2)$r.squared,2)` and RMSE is `r round(sqrt(mean(model_lm2$residuals^2)),2)`.
+The following plot represents the observed values for the duration of the trips versus values predicted by our linear model. The blue line corresponds to the identity between observed and predicted values.
 
-```{r model_lm_predictions}
+```{r model_lm2_predictions}
 # Create a data frame with the observed and predicted values
-pred_df <- data.frame(duration = data$duration,
-                       predicted = predict(model_lm))
+pred_df <- data.frame(duration = log(data$duration),
+                       predicted = predict(model_lm2))
 
 # Create a scatter plot of observed vs. predicted values
 ggplot(pred_df, aes(x = predicted, y = duration)) +
    geom_point() +
    geom_abline(intercept = 0, slope = 1, linetype = "dashed", colour = "blue") +
-   labs(x = "Predicted Duration", y = "Observed Duration")
+   labs(x = "Predicted Duration (log)", y = "Observed Duration (log)")
 ```
 
 ## Generalised Additive Model (Emilia)
@@ -501,13 +501,13 @@ summary(model_gam)
 ```
 
 The summary output of the GAM model indicates that there is a strong evidence that the temperature, the precipitations, the dew point, and the distance have a strong non-linear effect on the duration of the trips. The distinction weekday/weekend also influences the duration of a bike trip.
-The smooth term for the distance has the largest edf value `r #round(summary(model_gam)$s.table["s(Distance)", "edf"], 3)` and precipitation the lowest with a value of `r #round(summary(model_gam)$s.table["s(Precipitation)", "edf"], 3)`. The intercept is existing.
+The smooth term for the distance has the largest edf value (8.998) and precipitation the lowest with a value of 5.554. The intercept is existing.
 
-We made similar observations with the linear model used above. However, the GAM performs better: the R^2 is of `r #round(summary(model_gam)$r.squared,2)`.
+We made similar observations with the more simplistic linear model used above. The GAM model performs slighlty better: the R^2 is of 0.39.
 
 ## Estimating the trip duration with a Neural Network (Pascal)
 
-We also want to see if we can get a better estimation of the trip duration with a neural net. In order to do this, we first scaled our dataset and splitted in a test- and train-part.
+We also wanted to see if we could get a better estimation of the trip duration with a neural network. In order to do this, we first scaled our dataset and then splitted in a test- and train-part. Round trips have been excluded from this analysis.
 
 ```{r prepare_neuronal_net_data}
 # fix random generator
@@ -520,7 +520,7 @@ data_trips <- data %>%
 # select the predictors
 predictors <- c("h_distance", "temp", "prcp")
 
-# selec columns, drop NA and take random subsample of 100k trips
+# select columns, drop NA and take random subsample of 100k trips
 data_trips <- data_trips %>% 
   select(c("duration", all_of(predictors))) %>%
   drop_na() %>% 
@@ -541,7 +541,7 @@ train_trips <- data_trips_scaled[trainIndex,]
 test_trips <- data_trips_scaled[-trainIndex,]
 ```
 
-As a baseline model, we took a very simple net consisting of one predictor (the haversine distance) and one hidden layer containing a single neuron.
+As a baseline model, we took a very simple network consisting of one predictor (the haversine distance) and one hidden layer containing a single neuron.
 
 ```{r nn_baseline}
 # train the neural network
@@ -576,7 +576,7 @@ mtext(paste("RMSE: ", round(rmse, digits = 3), " (", round(rmse_rescaled, 3), ")
 
 The RMSE calculated with the data scaled back lies at `r round(rmse_rescaled, 3)`. This was already better than the linear model above, although we have to consider that the training data consisted only of a subset and we filtered out round trips in this case.
 
-We wanted to see if we could achieve better results with different parameters. We added all available predictors and used the caret-package to try out different options of the neuronal net.
+We wanted to see if we could achieve better results with different parameters. We added supplementary predictors and used the caret-package to try out different options of the neuronal net.
 
 ```{r nn_tuning, cache=TRUE}
 
