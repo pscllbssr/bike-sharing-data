@@ -687,7 +687,7 @@ We plotted the correlation between the average daily temperature at the start of
 trips_per_station %>%
   ggplot(mapping = aes(y = trips, x = avg_temp)) + 
   facet_wrap(~start_station_id) + 
-  geom_point() +
+  geom_point(alpha=1/2) +
   stat_smooth(method = "glm", method.args = list(family = 'poisson'), colour = '#F8766D') +
   labs(title = "Number of Trips vs. Average Temperature", 
        subtitle = 'At 6 most frequented stations',
@@ -763,62 +763,9 @@ fitted_round_disc <- ifelse(fitted(glm_binomial) < 0.5, yes = 0, no = 1)
 # comparison observed and fitted values
 obs_fit_round <- data.frame(obs = as.numeric(data$round_trip), fitted = fitted_round_disc)
 # summary of the comparison
-#table(obs=obs_fit_round$obs, fit=obs_fit_round$fitted)
-
-column_counts <- lapply(obs_fit_round, table)
-column_counts
+table(obs=obs_fit_round$obs, fit=obs_fit_round$fitted) 
 ```
 Unfortunately, none of the fitted values is coded to be a round trip. This model is not sensitive and would need more optimization.
-
-# Prediction the trip ending at station bla using a generalised linear model (Binomial)
-
-Generalized linear model with binomial: You could also explore the likelihood of a trip ending at a particular end station using a generalized linear model with binomial distribution. You could use the latitude and longitude of the start and end stations as predictor variables to see if there are any geographic patterns in the likelihood of a trip ending at a particular station.
-
-We identified the station in which most of the trips ended.
-```{r top_end_station}
-station_counts <- table(data$end_station_id)
-most_common_station <- names(station_counts)[which.max(station_counts)]
-most_common_station_city <- data %>% filter(end_station_id == most_common_station) %>% head(1)
-most_common_station_city <- most_common_station_city$city
-max_end_trips <- data %>% filter(end_station_id == most_common_station) %>% nrow()
-```
-The station `r most_common_station` in `r most_common_station_city` had `r max_end_trips` trips ending in this station.
-We filtered the data for Bergen and added a dummy variable for trips ending or not in this station.
-
-```{r data_binom_bergen}
-data_binom <- data %>% filter(city == "Bergen") %>%
-  mutate(is_common_station = ifelse(end_station_id == most_common_station, 1, 0))
-```
-
-```{r bergen_plot}
-data_binom %>% 
-  ggplot(mapping = aes(x = factor(start_station_id), fill = as.factor(is_common_station))) +
-    geom_bar()
-```
-
-We use a generalized linear model with family set to binomial to analyze how the different start stations and the distinction between weekday or weekend influence the likelihood of a trip to end at the station `r most_common_station`.
-```{r binomial_bergen}
-glm_binomial2 <- glm(is_common_station ~ start_station_id + weekend,
-                     family = "binomial",
-                     data = data_binom)
-
-summary(glm_binomial2)
-```
-
-To assess the performance of the binary model, we compared the predicted values with the actual observations.
-```{r performance_binomial}
-# We discretise the fitted values into 0 and 1 using a cutoff of 0.5.
-fitted_bergen_disc <- ifelse(fitted(glm_binomial2) < 0.5, yes = 0, no = 1)
-head(fitted_bergen_disc)
-# comparison observed and fitted values
-obs_fit_bergen <- data.frame(obs = as.numeric(data_binom$is_common_station), fitted = fitted_bergen_disc)
-head(obs_fit_bergen)
-# summary of the comparison
-table(obs=obs_fit_bergen$obs, fit=obs_fit_bergen$fitted)
-
-column_counts2 <- lapply(obs_fit_bergen, table)
-column_counts2
-```
 
 # Identifying cities with a Support Vector Machine
 
@@ -837,7 +784,6 @@ cities <- rbind(cities_start, cities_end)
 rm(cities_start, cities_end)
 
 cities$city <- as.factor(cities$city)
-
 
 set.seed(10)
 cities_subset <- rbind(
